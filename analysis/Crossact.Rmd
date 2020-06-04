@@ -1,0 +1,1349 @@
+---
+title: "Sampling to learn words: Adults and children sample words that reduce referential ambiguity"
+output:
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+library(here)
+#set data path
+data_path <- here("..","data","Crossact_data.csv")
+source('summarizeData.R') #helper functions, from R cookbook (http://www.cookbook-r.com/Graphs/Plotting_means_and_error_bars_(ggplot2)/)
+library(tidyverse) #version 1.2.1
+library(cowplot) #version 1.0.0
+theme_set(theme_cowplot())
+library(lme4) #version 1.1-21
+library(car) #version 3.0-3
+library(AICcmodavg) #version 2.2-2
+library(ggstance) #version 0.3.3
+library(knitr) #version 1.24
+library(DT) #version 0.8
+
+```
+
+Analysis walkthrough for the paper "Sampling to learn words: 
+Adults and children sample words that reduce referential ambiguity
+" (Author names removed, 2019).
+
+See crossact_codebook for information about individual columns.
+
+## Reading in data and preliminary processing
+
+```{r, warning=F,message=F}
+d <- read.csv(data_path)
+```
+
+## Exclusions
+
+Overview over exclusions in each experiment.
+
+```{r, warning=F,message=F}
+##exclusions
+exclusions <-  d %>%
+  group_by(subject,experiment_name) %>%
+  summarize(Exclude=Exclude[1]) %>%
+  ungroup()  %>%
+  group_by(experiment_name) %>%
+  summarize(N=n(),num_exclusions=sum(Exclude!="N"))
+kable(exclusions)
+
+#remove excluded participants
+d <- d %>%
+  filter(Exclude=="N")
+```
+
+## Demographics {.tabset}
+
+Overview over demographic characteristics of each sample.
+
+```{r, warning=F,message=F}
+##demographics (exclusions filtered)
+demographics <- d %>%
+  filter(Exclude=="N") %>%
+  group_by(subject,age_group,experiment_name) %>%
+  summarize(Gender=Gender[1],Age=Age[1],L1_english=L1_english[1],languages_besides_english_yn=languages_besides_english_yn[1],L1=L1[1],L1percent=L1percent[1]) %>%
+  ungroup() %>%
+  group_by(age_group,experiment_name)  %>%
+  summarize(
+    N=n(),
+    gender_f=sum(Gender=="female"),
+    mean_age=round(mean(Age,na.rm=T),2),
+    sd_age=round(sd(Age,na.rm=T),2),
+    min_age=round(min(Age,na.rm=T),2),
+    max_age=round(max(Age,na.rm=T),2),
+    native_english=ifelse(is.na(sum(L1_english=="English")),sum(L1=="English",na.rm=T),sum(L1_english=="English",na.rm=T)),
+    languages_besides_english=ifelse(age_group[1]=="adults",NA,sum(languages_besides_english_yn=="Yes",na.rm=T)),
+    monolingual=ifelse(age_group[1]=="adults",NA,sum(L1percent>=90,na.rm=T))
+  )
+```
+
+
+### Experiment 1 {.tabset}
+
+```{r, warning=F,message=F}
+demographics %>%
+  filter(experiment_name=="Experiment 1") %>%
+  kable()
+```
+
+### Experiment 2 {.tabset}
+
+#### Gender, Age, Native Language
+
+```{r, warning=F,message=F}
+demographics %>%
+  filter(experiment_name=="Experiment 2") %>%
+  kable()
+```
+
+#### Ethnicity
+
+```{r, message=F, warning=F}
+d %>%
+  filter(Exclude=="N"&experiment_name=="Experiment 2") %>%
+  group_by(subject) %>%
+  summarize(hispanic=hispanic[1],ethnicity=ethnicity[1]) %>%
+  ungroup() %>%
+  group_by(hispanic,ethnicity) %>%
+  summarize(count=n()) %>%
+  kable()
+```
+
+
+### Experiment 3 {.tabset}
+
+Note that we currently missing some demographic information (ethnicity & language) for 6 of the 56 participants, due to experimenter error.
+
+#### Gender, Age, Native Language
+
+```{r, warning=F,message=F}
+demographics %>%
+  filter(experiment_name=="Experiment 3") %>%
+  kable()
+```
+
+#### Ethnicity
+
+```{r, message=F, warning=F}
+d %>%
+  filter(Exclude=="N"&experiment_name=="Experiment 3") %>%
+  group_by(subject) %>%
+  summarize(hispanic=hispanic[1],ethnicity=ethnicity[1]) %>%
+  ungroup() %>%
+  group_by(hispanic,ethnicity) %>%
+  summarize(count=n()) %>%
+  kable()
+```
+
+
+### Experiment S1 {.tabset}
+
+```{r, warning=F,message=F}
+demographics %>%
+  filter(experiment_name=="Experiment S1") %>%
+  kable()
+```
+
+## Summarizing data by participant {.tabset}
+
+First, we summarize sampling and test behavior by participant and store these objects for later plotting and analysis.
+
+### Sampling
+
+```{r, warning=F,message=F}
+#Summarize sampling and test behavior by subject
+#used in later analyses and plotting
+
+#selections by subject
+subj_selection <- d %>%
+  filter(trialType=="selection") %>%
+  group_by(experiment_name,ambiguity_condition,subject) %>%
+  summarize(
+    N=n(),
+    prop_ambig_selection=sum(selectionType!="low")/N,
+    num_ambig_selection=sum(selectionType!="low"))
+
+subj_selection %>%
+  arrange(experiment_name,ambiguity_condition,subject) %>%
+  DT::datatable()
+```
+
+### Overall Test
+
+```{r, warning=F,message=F}
+#test performance by subject
+subj_test <- d %>%
+  filter(trialType=="test") %>%
+  group_by(experiment_name,ambiguity_condition,subject) %>%
+  summarize(
+    N=n(),
+    accuracy=mean(isRight,na.rm=T))
+subj_test %>%
+  arrange(experiment_name,ambiguity_condition,subject) %>%
+  DT::datatable()
+```
+
+### Test By Item
+
+```{r, warning=F,message=F}
+#test performance split by item type (ambiguous vs. non-ambiguous)
+subj_test_item <- d %>%
+  filter(trialType=="test") %>%
+  group_by(experiment_name,ambiguity_condition,subject,targetType,targetIsAmbiguous,targetIsAmbiguousYN) %>%
+  summarize(
+    N=n(),
+    accuracy=mean(isRight,na.rm=T))
+subj_test_item %>%
+  arrange(experiment_name,ambiguity_condition,subject) %>%
+  DT::datatable()
+```
+
+
+## Experiment 1
+
+### Sampling {.tabset}
+
+Analysis of learners' sampling preferences.
+
+#### Plot
+
+Plot is based on estimates from the logistic mixed-effects model
+
+```{r, warning=F, message=F}
+#create data frame with model predictions
+m <- glmer(isAmbiguous~(1|subject)+(1|choiceImage),data=subset(d,experiment_name=="Experiment 1"&trialType=="selection"&ambiguity_condition=="ambiguous"),family=binomial, glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+model_pred <- data.frame(ambiguity_condition="ambiguous")
+pY <- predictSE(m,model_pred, type="response")
+model_pred <- model_pred %>%
+  mutate(
+    experiment_name= "Experiment 1",
+    prop_ambiguous = pY$fit,
+    prop_ambiguous_lower_ci = pY$fit - 1.96*pY$se.fit,
+    prop_ambiguous_upper_ci = pY$fit + 1.96*pY$se.fit)
+
+#create plot
+p_exp1_sampling <- ggplot(subset(model_pred,ambiguity_condition=="ambiguous"),aes(x=experiment_name,y=prop_ambiguous,color=ambiguity_condition,fill=ambiguity_condition))+
+  geom_bar(stat="identity",size=2.5,fill="white",width=0.5)+
+  geom_dotplot(data=subset(subj_selection,experiment_name=="Experiment 1"&ambiguity_condition=="ambiguous"), aes(y=prop_ambig_selection),binaxis="y",stackdir="center",alpha=0.5,dotsize=0.6)+
+  geom_errorbar(aes(ymin=prop_ambiguous_lower_ci,ymax=prop_ambiguous_upper_ci),width=0,size=1.2)+
+  ylab("Probability of \nAmbiguous Selection")+
+  geom_hline(yintercept=0.5,linetype="dotted")+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1),limits=c(0,1.08))+
+  scale_color_brewer(palette="Set1")+
+  scale_fill_brewer(palette="Set1")+
+  theme_classic(base_size=24)+
+  theme(legend.position="none")+
+  scale_x_discrete(name="Experiment 1")+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank())
+p_exp1_sampling
+```
+
+#### Descriptives
+```{r, warning=F,message=F}
+#descriptives
+subj_summary_1 <-  subj_selection %>%
+  filter(experiment_name=="Experiment 1") %>%
+  group_by(ambiguity_condition) %>%
+  summarize(
+    N=n(),
+    prop_ambiguous=mean(prop_ambig_selection),
+    ci_ambiguous=qt(0.975, N-1)*sd(prop_ambig_selection,na.rm=T)/sqrt(N),
+    prop_ambiguous_lower_ci=prop_ambiguous-ci_ambiguous,
+    prop_ambiguous_upper_ci=prop_ambiguous+ci_ambiguous,
+  ) %>%
+  select(-ci_ambiguous)
+kable(subj_summary_1)
+```
+
+
+#### Logistic mixed-effects model
+
+```{r, warning=F, message=F}
+m <- glmer(isAmbiguous~(1|subject)+(1|choiceImage),data=subset(d,experiment_name=="Experiment 1"&trialType=="selection"&ambiguity_condition=="ambiguous"),family=binomial, glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+summary(m)
+confint(m,method="Wald")[3,]
+```
+
+Note that we ignore a singular fit warning here. This appears to be caused by the inclusion of a by-item random intercept - however, it does not appear to adversely affect the model fit, and a simplified model with the by-stimulus random intercept removed yields virtually identical results.
+
+#### Non-parametric test (Wilcoxon)
+
+```{r, warning=F, message=F}
+wilcox.test(filter(subj_selection, experiment_name=="Experiment 1"&ambiguity_condition=="ambiguous")$prop_ambig_selection,mu=1/2, conf.int=T, conf.level=0.95)
+```
+
+### Test {.tabset}
+
+Analysis of learners' test performance.
+
+#### Plot
+
+```{r, warning=F,message=F}
+## split by item, within-subjects corrected CIs
+subj_summary_test_item_1 <-  summarySEwithin(
+  filter(
+    subj_test_item,
+    experiment_name=="Experiment 1"),
+  "accuracy",
+  betweenvars=c("experiment_name","ambiguity_condition"),
+  withinvars=c("targetIsAmbiguousYN"),
+  idvar="subject") %>%
+  mutate(
+    lower_ci = accuracy - ci,
+    upper_ci = accuracy + ci
+  ) %>%
+  select(-accuracy_norm,-sd,-se,-ci)
+## by-item test plot
+ggplot(subj_summary_test_item_1,aes(x=targetIsAmbiguousYN,y=accuracy,color=targetIsAmbiguousYN,fill=targetIsAmbiguousYN))+
+  geom_bar(stat="identity",size=1.5,position=position_dodge(.53),width=0.5,alpha=0)+
+  geom_point(data=filter(subj_test_item,experiment_name=="Experiment 1"),aes(fill=targetIsAmbiguousYN),alpha=0.5,position=position_jitterdodge(dodge.width=0.53,jitter.width=0.1,jitter.height=0.02))+
+  geom_errorbar(aes(ymin=lower_ci,ymax=upper_ci),width=0.0,size=0.8,position=position_dodge(.53))+
+  scale_color_manual(name="Item Type",
+                     limits=c("no","yes"),
+                     labels=c("disambiguated","ambiguous"),
+                     values=c("#4DAF4A","#E41A1C"))+
+  scale_fill_manual(name="Item Type",
+                    limits=c("no","yes"),
+                    labels=c("disambiguated","ambiguous"),
+                    values=c("#4DAF4A","#E41A1C"))+
+  scale_x_discrete(name = "Item Type",
+                   limits=c("no","yes"),
+                   labels=c("disambiguated","fully\nambiguous"))+
+  ylab("Test Accuracy")+
+  geom_hline(yintercept=1/8,linetype="dashed",size=1.1)+
+  theme_classic(base_size=16)+
+  theme(legend.position="none", axis.text.x=element_text(size=15))
+```
+
+
+#### Descriptives
+
+##### Overall Test Accuracy
+
+```{r, warning=F,message=F}
+## descriptives
+subj_summary_test_1 <-  subj_test %>%
+  filter(experiment_name=="Experiment 1") %>%
+  group_by(experiment_name,ambiguity_condition) %>%
+  summarize(
+    N=n(),
+    prop_correct=mean(accuracy,na.rm=T),
+    ci=qt(0.975, N-1)*sd(accuracy,na.rm=T)/sqrt(N),
+    prop_correct_lower_ci=prop_correct-ci,
+    prop_correct_upper_ci=prop_correct+ci
+  ) %>%
+  select(-ci)
+kable(subj_summary_test_1)
+```
+
+##### Test Accuracy Split by Item
+
+```{r, warning=F, message=F}
+kable(subj_summary_test_item_1)
+```
+
+
+#### Logistic mixed-effects model
+
+##### Testing Difference between Items
+
+```{r, warning=F, message=F}
+## testing difference between items
+d$targetIsAmbiguousC <- ifelse(!is.na(d$targetIsAmbiguous) & d$targetIsAmbiguous==1,0.5,
+                                        ifelse(!is.na(d$targetIsAmbiguous) & d$targetIsAmbiguous==0,-0.5,NA))
+m <- glmer(isRight~targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=filter(d,(experiment_name=="Experiment 1")&trialType=="test"),family=binomial,glmerControl(optimizer="bobyqa"))
+summary(m)
+confint(m, method="Wald")[5:6,]
+```
+
+#### Relationship between sampling and test accuracy
+
+```{r, warning=F,message=F}
+#join sampling and test
+subj_selection <- subj_selection %>%
+  left_join(subj_test,by=c("subject","experiment_name","ambiguity_condition"))
+
+#correlation between preference for sampling ambiguous items and test performance
+cor.test(subset(subj_selection,ambiguity_condition=="ambiguous"&experiment_name=="Experiment 1")$accuracy,subset(subj_selection,ambiguity_condition=="ambiguous"&experiment_name=="Experiment 1")$prop_ambig_selection)
+```
+
+Plot correlation between sampling preference and test accuracy
+
+```{r, warning=F,message=F}
+p_exp1_sampling_test <- ggplot(filter(subj_selection,experiment_name=="Experiment 1"),aes(prop_ambig_selection,accuracy, color=ambiguity_condition))+
+  geom_violin(aes(group=prop_ambig_selection),draw_quantiles=c(0.5))+
+  geom_dotplot(aes(group=prop_ambig_selection,fill=ambiguity_condition),alpha=0.6,binaxis="y",stackdir="center",dotsize=0.8)+
+  scale_color_manual(limits=c("ambiguous"),
+                     values=c("#E41A1C"))+
+  geom_smooth(method="lm",color="black",fill="#4B0082",alpha=0.3)+
+  theme_classic()+
+  scale_x_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1))+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1),limits=c(0,1.08))+
+  theme_classic(base_size=24)+
+  ylab("Test Accuracy")+
+  theme(legend.position="none")+
+  xlab("Probability of \nAmbiguous Selection")
+p_exp1_sampling_test
+```
+
+## Experiment 2
+
+### Sampling {.tabset}
+
+Analysis of learners' sampling preferences.
+
+#### Plot
+
+```{r, warning=F, message=F}
+ggplot(filter(subj_selection,experiment_name=="Experiment 2"),aes(x=num_ambig_selection,fill=as.factor(num_ambig_selection),color=as.factor(num_ambig_selection)))+
+  scale_fill_brewer(palette="Set1",direction=-1)+
+  scale_color_brewer(palette="Set1",direction=-1)+
+  geom_bar(stat="count",size=1.5,alpha=0.2,width=0.5)+
+  geom_vline(xintercept=4/3,linetype="dashed")+
+  theme(axis.title = element_text(size=20),
+        axis.text  = element_text(size=16),
+        legend.position="none")+
+  ylab("Number of subjects")+
+  xlab("Number of ambiguous selections")+
+  #geom_density(aes(group=1, y=..count../1.3))+
+  scale_x_continuous(breaks=c(0,1,2,3,4), limits=c(-0.5,4))+
+  scale_y_continuous(breaks=c(0,5,10,15,20,25,30), limits=c(0,20))
+```
+
+#### Descriptives
+```{r, warning=F,message=F}
+#descriptives
+subj_summary_2 <-  subj_selection %>%
+  filter(experiment_name=="Experiment 2") %>%
+  group_by(ambiguity_condition) %>%
+  summarize(
+    N=n(),
+    prop_ambiguous=mean(prop_ambig_selection),
+    ci_ambiguous=qt(0.975, N-1)*sd(prop_ambig_selection,na.rm=T)/sqrt(N),
+    prop_ambiguous_lower_ci=prop_ambiguous-ci_ambiguous,
+    prop_ambiguous_upper_ci=prop_ambiguous+ci_ambiguous,
+  ) %>%
+  select(-ci_ambiguous)
+kable(subj_summary_2)
+```
+
+#### Logistic mixed-effects model
+
+```{r, warning=F, message=F}
+d$offset.33 <- 1/3
+m <- glmer(isAmbiguous~offset(logit(offset.33))+(1|subject)+(1|choiceImage),data=subset(d,experiment_name=="Experiment 2"&trialType=="selection"),family=binomial, glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+summary(m)
+confint(m, method="Wald")[3,]
+```
+
+Note that we ignore a singular fit warning here. This appears to be caused by the inclusion of a by-item random intercept - however, it does not appear to adversely affect the model fit, and a simplified model with the by-stimulus random intercept removed yields virtually identical results.
+
+#### Non-parametric test (Wilcoxon)
+
+```{r, warning=F, message=F}
+wilcox.test(filter(subj_selection,experiment_name=="Experiment 2")$prop_ambig_selection,mu=1/3, conf.int=T, conf.level=0.95)
+```
+
+#### Relationship with Age
+
+```{r, warning=F, message=F}
+#predict ambiguous selections from age
+m <- glmer(isAmbiguous~Age+(1|subject)+(1|choiceImage),data=subset(d,experiment_name=="Experiment 2"&trialType=="selection"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+summary(m)
+confint(m, method="Wald")[3:4,]
+
+#plot model predictions
+pX <- data.frame(Age=seq(min(subset(d,experiment_name=="Experiment 2"&trialType=="selection")$Age,na.rm=T),max(subset(d,experiment_name=="Experiment 2"&trialType=="selection")$Age,na.rm=T),by=0.1))
+pY <- predictSE(m,pX,re.form=NA,type="response")
+pX$isAmbiguous <- pY$fit
+pX$YLower <- pY$fit-pY$se.fit
+pX$YUpper <- pY$fit+pY$se.fit
+ggplot(pX,aes(Age,isAmbiguous))+
+  geom_violinh(data=subset(d,experiment_name=="Experiment 2"&trialType=="selection"),aes(y=isAmbiguous,group=isAmbiguous),scale="count",width=0.1, trim=F)+
+  geom_jitter(data=subset(d,experiment_name=="Experiment 2"&trialType=="selection"),aes(y=isAmbiguous,group=isAmbiguous),height=0.01)+
+  geom_smooth(aes(ymin=YLower,ymax=YUpper),stat="identity",color="#E41A1C",fill="#E41A1C")+
+  geom_hline(yintercept=1/3,linetype="dotted")+
+  theme_classic(base_size=16)+
+  xlab("Age (in years)")+
+  scale_x_continuous(breaks=c(3,4,5,6,7,8))+
+  ylab("Proportion of ambiguous selections")+
+  theme(axis.title = element_text(size=20),
+        axis.text  = element_text(size=16))
+```
+
+### Test {.tabset}
+
+#### Plot
+
+```{r, warning=F, message=F}
+#summarize across participants by item type
+subj_summary_item_2 <- summarySEwithin(
+  filter(
+    subj_test_item,
+    (experiment_name=="Experiment 2")),
+  "accuracy",
+  betweenvars=c("experiment_name","ambiguity_condition"),
+  withinvars=c("targetIsAmbiguousYN"),
+  idvar="subject") %>%
+  mutate(
+    lower_ci = accuracy - ci,
+    upper_ci = accuracy + ci
+  ) %>%
+  select(-accuracy_norm,-sd,-se,-ci)
+## create plot
+ggplot(subj_summary_item_2,aes(x=targetIsAmbiguousYN,y=accuracy,color=targetIsAmbiguousYN,fill=targetIsAmbiguousYN))+
+  geom_bar(stat="identity",size=1.5,position=position_dodge(.53),width=0.5,alpha=0)+
+  geom_dotplot(data=filter(subj_test_item,experiment_name=="Experiment 2"),alpha=0.6,binaxis="y",stackdir="center",dotsize=0.8)+
+  geom_errorbar(aes(ymin=lower_ci,ymax=upper_ci),width=0.0,size=0.6,position=position_dodge(.53))+
+  scale_color_manual(name="Item Type",
+                     limits=c("no","yes"),
+                     labels=c("disambiguated","ambiguous"),
+                     values=c("#4DAF4A","#E41A1C"))+
+  scale_fill_manual(name="Item Type",
+                    limits=c("no","yes"),
+                    labels=c("disambiguated","ambiguous"),
+                    values=c("#4DAF4A","#E41A1C"))+
+  scale_x_discrete(name = "Item Type",
+                   limits=c("no","yes"),
+                   labels=c("disambiguated","ambiguous"))+
+  ylab("Test Accuracy")+
+  geom_hline(yintercept=1/6,linetype="dashed",size=1.1)+
+  theme_classic(base_size=16)+
+  theme(legend.position="none", axis.text.x=element_text(size=15))
+```
+
+#### Descriptives
+
+##### Overall Test Accuracy
+
+```{r, warning=F,message=F}
+##descriptives
+#overall
+subj_summary_test_2 <-  subj_test %>%
+  filter(experiment_name=="Experiment 2") %>%
+  group_by(experiment_name,ambiguity_condition) %>%
+  summarize(
+    N=n(),
+    prop_correct=mean(accuracy,na.rm=T),
+    ci=qt(0.975, N-1)*sd(accuracy,na.rm=T)/sqrt(N),
+    prop_correct_lower_ci=prop_correct-ci,
+    prop_correct_upper_ci=prop_correct+ci
+  ) %>%
+  select(-ci)
+kable(subj_summary_test_2)
+
+##overall performance
+t.test(filter(subj_test,experiment_name=="Experiment 2")$accuracy,mu=1/6)
+```
+
+##### Test Accuracy Split by Item
+
+```{r, warning=F, message=F}
+#by item type
+subj_summary_item_2 %>%
+  kable()
+```
+
+#### Logistic Mixed-Effects Model
+
+##### Test Accuracy by Item Type
+
+```{r, warning=F,message=F}
+## accuracy by item type
+##logistic mixed=effects model
+m <- glmer(isRight~targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=subset(d,trialType=="test"&experiment_name=="Experiment 2"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+summary(m)
+confint(m, method="Wald")[5:6,]
+```
+
+#### Ambiguous Item Choices
+
+Which items (ambiguous vs. disambiguated) do participants choose on each test trial type? Here, we asked what proportion of the time participants select one of the two ambiguous items when the target label is for an ambiguous vs. a disambiguated item (regardless of accuracy).
+
+```{r, warning=F,message=F}
+## by choice type
+# Which items (ambiguous vs. disambiguated) do participants choose on each test trial type?
+d$testChoiceType <- ifelse(d$trialType=="test"&(as.character(d$choiceImage)==d$High1|as.character(d$choiceImage)==d$High2),"ambiguous",
+                           ifelse(d$trialType=="test","disambiguated",NA))
+
+#summarize choice tendency by participant
+subj_test_choiceType_2 <- d %>%
+  filter(trialType=="test"&experiment_name  == "Experiment 2") %>%
+  group_by(subject,experiment_name,ambiguity_condition,targetType,targetIsAmbiguous,targetIsAmbiguousYN) %>%
+  summarize(
+    N=n(),
+    ambiguous_choice=mean(testChoiceType=="ambiguous",na.rm=T))
+
+#summarize across participants
+subj_summary_choiceType_2 <- summarySEwithin(
+  subj_test_choiceType_2,
+  "ambiguous_choice",
+  betweenvars=c("experiment_name","ambiguity_condition"),
+  withinvars=c("targetIsAmbiguousYN"),
+  idvar="subject") %>%
+  mutate(
+    lower_ci = ambiguous_choice - ci,
+    upper_ci = ambiguous_choice + ci
+  ) %>%
+  select(-ambiguous_choice_norm,-sd,-se,-ci)
+kable(subj_summary_choiceType_2)
+
+##plot
+ggplot(subj_summary_choiceType_2,aes(x=targetIsAmbiguousYN,y=ambiguous_choice,color=targetIsAmbiguousYN,fill=targetIsAmbiguousYN))+
+  geom_bar(stat="identity",size=1.5,position=position_dodge(.53),width=0.5,alpha=0)+
+  geom_dotplot(data=subj_test_choiceType_2,alpha=0.6,binaxis="y",stackdir="center",dotsize=0.8)+
+  geom_errorbar(aes(ymin=lower_ci,ymax=upper_ci),width=0.0,size=0.6,position=position_dodge(.53))+
+  scale_color_manual(name="Item Type",
+                     limits=c("no","yes"),
+                     labels=c("disambiguated","ambiguous"),
+                     values=c("#4DAF4A","#E41A1C"))+
+  scale_fill_manual(name="Item Type",
+                    limits=c("no","yes"),
+                    labels=c("disambiguated","ambiguous"),
+                    values=c("#4DAF4A","#E41A1C"))+
+  scale_x_discrete(name = "Item Type",
+                   limits=c("no","yes"),
+                   labels=c("disambiguated","ambiguous"))+
+  ylab("Proportion Ambiguous Items Selected")+
+  geom_hline(yintercept=1/3,linetype="dashed",size=1.1)+
+  theme_classic(base_size=16)+
+  theme(legend.position="none", axis.text.x=element_text(size=15))
+```
+
+#### Sampling and test accuracy
+
+##### Overall Accuracy for Sampled vs. Not Sampled Items
+
+```{r, warning=F, message=F}
+#summarize test accuracy by choice
+subj_test_choice_2 <- d %>%
+  filter(trialType=="test"&experiment_name  %in% c("Experiment 2")) %>%
+  group_by(subject,experiment_name,ambiguity_condition,chosen) %>%
+  summarize(
+    N=n(),
+    accuracy=mean(isRight,na.rm=T)) 
+
+subj_summary_choice_2 <- summarySEwithin(
+  subj_test_choice_2,
+  "accuracy",
+  betweenvars=c("experiment_name","ambiguity_condition"),
+  withinvars=c("chosen"),
+  idvar="subject",
+  na.rm=T) %>%
+  mutate(
+    lower_ci = accuracy - ci,
+    upper_ci = accuracy + ci,
+    chosen_factor=ifelse(chosen==0,"NOT SAMPLED","SAMPLED")
+  )
+subj_summary_choice_2 %>%
+  select(-accuracy_norm, -sd,-se,-ci) %>%
+  kable()
+```
+
+##### Plot by Item Type
+
+```{r, warning=F,message=F}
+subj_test_item_choice_2 <- d %>%
+  filter(trialType=="test"&experiment_name  %in% c("Experiment 2")) %>%
+  group_by(subject,experiment_name,ambiguity_condition,chosen,targetType,targetIsAmbiguous,targetIsAmbiguousYN) %>%
+  summarize(
+    N=n(),
+    accuracy=mean(isRight,na.rm=T))
+
+subj_summary_item_choice_2 <- summarySEwithin(
+  subj_test_item_choice_2,
+  "accuracy",
+  betweenvars=c("experiment_name","ambiguity_condition"),
+  withinvars=c("chosen","targetIsAmbiguousYN"),
+  idvar="subject",
+  na.rm=T) %>%
+  mutate(
+    lower_ci = accuracy - ci,
+    upper_ci = accuracy + ci,
+    chosen_factor=ifelse(chosen==0,"NOT SAMPLED","SAMPLED")
+  )
+
+ggplot(subj_summary_item_choice_2,aes(x=targetIsAmbiguousYN,y=accuracy,color=targetIsAmbiguousYN,fill=targetIsAmbiguousYN))+
+  geom_bar(stat="identity",size=1.5,position=position_dodge(.53),width=0.5,alpha=0)+
+  geom_errorbar(aes(ymin=lower_ci,ymax=upper_ci),width=0.0,size=0.6,position=position_dodge(.53))+
+  scale_color_manual(name="Item Type",
+                     limits=c("no","yes"),
+                     labels=c("disambiguated","ambiguous"),
+                     values=c("#4DAF4A","#E41A1C"))+
+  scale_fill_manual(name="Item Type",
+                    limits=c("no","yes"),
+                    labels=c("disambiguated","ambiguous"),
+                    values=c("#4DAF4A","#E41A1C"))+
+  scale_x_discrete(name = "Item Type",
+                   limits=c("no","yes"),
+                   labels=c("disambiguated","ambiguous"))+
+  ylab("Test Accuracy")+
+  geom_hline(yintercept=1/4,linetype="dashed",size=1.1)+
+  theme_classic(base_size=16)+
+  theme(legend.position="none", axis.text.x=element_text(size=15))+
+  facet_wrap(~chosen_factor)
+```
+
+##### Logistic Mixed-Effects Model
+
+```{r, warning=F,message=F}
+d$chosenC <- ifelse(!is.na(d$chosen)&d$chosen==0,-0.5,
+            ifelse(!is.na(d$chosen)&d$chosen==1,0.5,NA))
+m <- glmer(isRight~targetIsAmbiguousC*chosenC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=subset(d,trialType=="test"&experiment_name=="Experiment 2"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+summary(m)
+confint(m, method="Wald")[5:8,]
+```
+
+
+## Experiment 3
+
+### Sampling {.tabset}
+
+Analysis of learners' sampling preferences.
+
+#### Plot
+
+```{r, warning=F, message=F}
+ggplot(filter(subj_selection,experiment_name=="Experiment 3"),aes(x=num_ambig_selection,fill=as.factor(num_ambig_selection),color=as.factor(num_ambig_selection)))+
+  scale_fill_brewer(palette="Set1",direction=-1)+
+  scale_color_brewer(palette="Set1",direction=-1)+
+  geom_bar(stat="count",size=1.5,alpha=0.2,width=0.5)+
+  theme(axis.title = element_text(size=20),
+        axis.text  = element_text(size=16),
+        legend.position="none")+
+  ylab("Number of subjects")+
+  xlab("Number of ambiguous selections")+
+  scale_x_continuous(breaks=c(0,1,2))+
+  scale_y_continuous(breaks=c(0,5,10,15,20,25,30))
+```
+
+#### Logistic mixed-effects model
+
+```{r, warning=F, message=F}
+m=glmer(isAmbiguous ~ 1+(1|subject)+(1|choiceImage),data=subset(d,experiment_name=="Experiment 3"&trialType=="selection"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+summary(m)
+confint(m,method="Wald")[3,]
+```
+
+Note that we ignore a singular fit warning here. This appears to be caused by the inclusion of a by-item random intercept - however, it does not appear to adversely affect the model fit, and a simplified model with the by-stimulus random intercept removed yields virtually identical results.
+
+#### Non-parametric test (Wilcoxon)
+
+```{r, warning=F, message=F}
+wilcox.test(filter(subj_selection,experiment_name=="Experiment 3")$prop_ambig_selection,mu=1/2, conf.int=T, conf.level=0.95)
+```
+
+#### Relationship with Age
+
+```{r, warning=F, message=F}
+#predict ambiguous selections from age
+m <- glmer(isAmbiguous~Age+(1|subject)+(1|choiceImage),data=subset(d,experiment_name=="Experiment 3"&trialType=="selection"),family=binomial)
+summary(m)
+confint(m, method="Wald")[3:4,]
+
+#plot model predictions
+pX <- data.frame(Age=seq(min(subset(d,experiment_name=="Experiment 3"&trialType=="selection")$Age,na.rm=T),max(subset(d,experiment_name=="Experiment 3"&trialType=="selection")$Age,na.rm=T),by=0.1))
+pY <- predictSE(m,pX,re.form=NA,type="response")
+pX$isAmbiguous <- pY$fit
+pX$YLower <- pY$fit-pY$se.fit
+pX$YUpper <- pY$fit+pY$se.fit
+ggplot(pX,aes(Age,isAmbiguous))+
+  geom_violinh(data=subset(d,experiment_name=="Experiment 3"&trialType=="selection"),aes(y=isAmbiguous,group=isAmbiguous),scale="count",width=0.1, trim=F)+
+  geom_jitter(data=subset(d,experiment_name=="Experiment 3"&trialType=="selection"),aes(y=isAmbiguous,group=isAmbiguous),height=0.01)+
+  geom_smooth(aes(ymin=YLower,ymax=YUpper),stat="identity",color="#E41A1C",fill="#E41A1C")+
+  geom_hline(yintercept=0.5,linetype="dotted")+
+  theme_classic(base_size=16)+
+  xlab("Age (in years)")+
+  scale_x_continuous(breaks=c(3,4,5,6,7,8))+
+  ylab("Proportion of ambiguous selections")+
+  theme(axis.title = element_text(size=20),
+        axis.text  = element_text(size=16))
+```
+
+### Test {.tabset}
+
+Analysis of learners' test accuracy.
+
+#### Plot
+
+```{r, warning=F,message=F}
+##plot by item type
+#by item type
+subj_summary_item_3 <- summarySEwithin(
+  filter(
+    subj_test_item,
+    (experiment_name=="Experiment 3")),
+  "accuracy",
+  betweenvars=c("experiment_name","ambiguity_condition"),
+  withinvars=c("targetIsAmbiguousYN"),
+  idvar="subject") %>%
+  mutate(
+    lower_ci = accuracy - ci,
+    upper_ci = accuracy + ci
+  )
+
+ggplot(subj_summary_item_3,aes(x=targetIsAmbiguousYN,y=accuracy,color=targetIsAmbiguousYN,fill=targetIsAmbiguousYN))+
+  geom_bar(stat="identity",size=1.5,position=position_dodge(.53),width=0.5,alpha=0)+
+  geom_dotplot(data=filter(subj_test_item,experiment_name=="Experiment 3"),alpha=0.6,binaxis="y",stackdir="center",dotsize=0.8)+
+  geom_errorbar(aes(ymin=lower_ci,ymax=upper_ci),width=0.0,size=0.6,position=position_dodge(.53))+
+  scale_color_manual(name="Item Type",
+                     limits=c("no","yes"),
+                     labels=c("mutual exclusivity","ambiguous"),
+                     values=c("#4DAF4A","#E41A1C"))+
+  scale_fill_manual(name="Item Type",
+                    limits=c("no","yes"),
+                    labels=c("mutual exclusivity","ambiguous"),
+                    values=c("#4DAF4A","#E41A1C"))+
+  scale_x_discrete(name = "Item Type",
+                   limits=c("no","yes"),
+                   labels=c("mutual exclusivity","ambiguous"))+
+  ylab("Test Accuracy")+
+  geom_hline(yintercept=1/4,linetype="dashed",size=1.1)+
+  theme_classic(base_size=16)+
+  theme(legend.position="none", axis.text.x=element_text(size=15))
+```
+
+#### Descriptives
+
+##### Overall Test Accuracy
+
+```{r, warning=F,message=F}
+## descriptives
+subj_summary_test_3 <-  subj_test %>%
+  filter(experiment_name=="Experiment 3") %>%
+  group_by(experiment_name,ambiguity_condition) %>%
+  summarize(
+    N=n(),
+    prop_correct=mean(accuracy,na.rm=T),
+    ci=qt(0.975, N-1)*sd(accuracy,na.rm=T)/sqrt(N),
+    prop_correct_lower_ci=prop_correct-ci,
+    prop_correct_upper_ci=prop_correct+ci)
+subj_summary_test_3 %>%
+  select(-ci) %>%
+  kable()
+```
+
+##### Test Accuracy Split by Item
+
+```{r, warning=F,message=F}
+subj_summary_item_3 %>%
+  select(-accuracy_norm,-se,-sd,-ci) %>%
+  kable()
+```
+
+#### Logistic Mixed-Effects Model
+
+#####  Overall Test Accuracy
+
+```{r, warning=F,message=F}
+##logistic mixed-effects model
+d$offset.25 <- 1/4
+#overall
+m <- glmer(isRight~offset(logit(offset.25))+(1|subject)+(1|targetImage),data=filter(d,experiment_name=="Experiment 3"&trialType=="test"),family=binomial)
+summary(m)
+confint(m,method="Wald")[3,]
+```
+
+
+##### Test Accuracy by Item Type
+
+```{r, warning=F,message=F}
+d$offset.25 <- 1/4
+##logistic mixed-effects model
+#by item type
+m <- glmer(isRight~offset(logit(offset.25))+targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=filter(d,experiment_name=="Experiment 3"&trialType=="test"),family=binomial)
+summary(m)
+confint(m,method="Wald")[5:6,]
+```
+
+#### Sampling and test accuracy
+
+##### Overall Accuracy for Sampled vs. Not Sampled Items
+
+```{r, warning=F, message=F}
+#summarize test accuracy by choice
+subj_test_choice_3 <- d %>%
+  filter(trialType=="test"&experiment_name  %in% c("Experiment 3")) %>%
+  group_by(subject,experiment_name,ambiguity_condition,chosen) %>%
+  summarize(
+    N=n(),
+    accuracy=mean(isRight,na.rm=T))
+
+subj_summary_choice_3 <- summarySEwithin(
+  subj_test_choice_3,
+  "accuracy",
+  betweenvars=c("experiment_name","ambiguity_condition"),
+  withinvars=c("chosen"),
+  idvar="subject",
+  na.rm=T) %>%
+  mutate(
+    lower_ci = accuracy - ci,
+    upper_ci = accuracy + ci,
+    chosen_factor=ifelse(chosen==0,"NOT SAMPLED","SAMPLED")
+  )
+subj_summary_choice_3 %>%
+  select(-accuracy_norm, -sd,-se,-ci) %>%
+  kable()
+```
+
+##### Plot by Item Type
+
+```{r, warning=F,message=F}
+subj_test_item_choice_3 <- d %>%
+  filter(trialType=="test"&experiment_name  %in% c("Experiment 3")) %>%
+  group_by(subject,experiment_name,ambiguity_condition,chosen,targetType,targetIsAmbiguous,targetIsAmbiguousYN) %>%
+  summarize(
+    N=n(),
+    accuracy=mean(isRight,na.rm=T))
+
+subj_summary_item_choice_3 <- summarySEwithin(
+  subj_test_item_choice_3,
+  "accuracy",
+  betweenvars=c("experiment_name","ambiguity_condition"),
+  withinvars=c("chosen","targetIsAmbiguousYN"),
+  idvar="subject",
+  na.rm=T) %>%
+  mutate(
+    lower_ci = accuracy - ci,
+    upper_ci = accuracy + ci,
+    chosen_factor=ifelse(chosen==0,"NOT SAMPLED","SAMPLED")
+  )
+
+ggplot(subj_summary_item_choice_3,aes(x=targetIsAmbiguousYN,y=accuracy,color=targetIsAmbiguousYN,fill=targetIsAmbiguousYN))+
+  geom_bar(stat="identity",size=1.5,position=position_dodge(.53),width=0.5,alpha=0)+
+  geom_errorbar(aes(ymin=lower_ci,ymax=upper_ci),width=0.0,size=0.6,position=position_dodge(.53))+
+  scale_color_manual(name="Item Type",
+                     limits=c("no","yes"),
+                     labels=c("mutual exclusivity","ambiguous"),
+                     values=c("#4DAF4A","#E41A1C"))+
+  scale_fill_manual(name="Item Type",
+                    limits=c("no","yes"),
+                    labels=c("mutual exclusivity","ambiguous"),
+                    values=c("#4DAF4A","#E41A1C"))+
+  scale_x_discrete(name = "Item Type",
+                   limits=c("no","yes"),
+                   labels=c("mutual exclusivity","ambiguous"))+
+  ylab("Test Accuracy")+
+  geom_hline(yintercept=1/4,linetype="dashed",size=1.1)+
+  theme_classic(base_size=16)+
+  theme(legend.position="none", axis.text.x=element_text(size=15))+
+  facet_wrap(~chosen_factor)
+```
+
+##### Logistic Mixed-Effects Model
+
+```{r, warning=F,message=F}
+m <- glmer(isRight~targetIsAmbiguousC*chosenC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=subset(d,trialType=="test"&experiment_name=="Experiment 3"),family=binomial,glmerControl(optimizer="bobyqa"))
+summary(m)
+confint(m, method="Wald")[5:8,]
+```
+
+## Experiment S1
+
+### Sampling {.tabset}
+
+Analysis of learners' sampling preferences.
+
+#### Plot
+
+```{r, warning=F, message=F}
+## Plot
+d$conditionFull <- ifelse(d$ambiguity_condition=="ambiguous",0,
+                          ifelse(d$ambiguity_condition=="partially ambiguous",-1,NA))
+m <- glmer(isAmbiguous~conditionFull+(1|subject)+(1|choiceImage),data=subset(d,experiment_name=="Experiment S1"&trialType=="selection"),family=binomial, glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+model_pred <- data.frame(conditionFull=c(-1,0),ambiguity_condition=c("partially ambiguous","ambiguous"))
+pY <- predictSE(m,model_pred, type="response")
+model_pred <- model_pred %>%
+  mutate(
+    prop_ambiguous = pY$fit,
+    prop_ambiguous_lower_ci = pY$fit - 1.96*pY$se.fit,
+    prop_ambiguous_upper_ci = pY$fit + 1.96*pY$se.fit)
+p_expS1_sampling <- ggplot(model_pred,aes(x=ambiguity_condition,y=prop_ambiguous,color=ambiguity_condition,fill=ambiguity_condition))+
+  geom_bar(stat="identity",size=2.5,fill="white",width=0.5)+
+  geom_dotplot(data=subset(subj_selection,experiment_name=="Experiment S1"), aes(y=prop_ambig_selection),binaxis="y",stackdir="center",alpha=0.5,dotsize=0.6)+
+  geom_errorbar(aes(ymin=prop_ambiguous_lower_ci,ymax=prop_ambiguous_upper_ci),width=0,size=1.2)+
+  ylab("Probability of \nAmbiguous Selection")+
+  geom_hline(yintercept=0.5,linetype="dotted")+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1),limits=c(0,1.08))+
+  scale_color_brewer(palette="Set1")+
+  scale_fill_brewer(palette="Set1")+
+  theme_classic(base_size=18)+
+  theme(legend.position="none")+
+  scale_x_discrete(name="Condition")
+p_expS1_sampling
+```
+
+#### Descriptives
+```{r, warning=F,message=F}
+#descriptives
+subj_summary_s1 <-  subj_selection %>%
+  filter(experiment_name=="Experiment S1") %>%
+  group_by(ambiguity_condition) %>%
+  summarize(
+    N=n(),
+    prop_ambiguous=mean(prop_ambig_selection),
+    ci_ambiguous=qt(0.975, N-1)*sd(prop_ambig_selection,na.rm=T)/sqrt(N),
+    prop_ambiguous_lower_ci=prop_ambiguous-ci_ambiguous,
+    prop_ambiguous_upper_ci=prop_ambiguous+ci_ambiguous,
+  ) %>%
+  select(-ci_ambiguous)
+kable(subj_summary_s1)
+```
+
+#### Logistic mixed-effects model {.tabset}
+
+##### Condition Comparison
+
+Estimating the difference in preference for selecting ambiguous items in the Partially Ambiguous condition vs. the Fully Ambiguous condition.
+
+```{r, warning=F,message=F}
+d$conditionC <- ifelse(d$ambiguity_condition=="ambiguous",0.5, 
+                       ifelse(d$ambiguity_condition=="partially ambiguous",-0.5,NA))
+m <- glmer(isAmbiguous~conditionC+(1|subject)+(1|choiceImage),data=subset(d,(experiment_name=="Experiment S1")&trialType=="selection"),family=binomial,glmerControl(check.conv.singular="ignore"))
+summary(m)
+confint(m,method="Wald")[3:4,]
+```
+
+##### Fully Ambiguous Condition
+
+Estimating the preference for (fully) ambiguous items by re-centering the model on the fully ambiguous condition. The intercept represents the preference for selecting ambiguous items in the Fully Ambiguous condition.
+
+```{r, warning=F,message=F}
+## Fully Ambiguous Condition
+d$conditionFull <- ifelse(d$ambiguity_condition=="ambiguous",0,
+                          ifelse(d$ambiguity_condition=="partially ambiguous",-1,NA))
+
+m <- glmer(isAmbiguous~conditionFull+(1|subject)+(1|choiceImage),data=subset(d,experiment_name=="Experiment S1"&trialType=="selection"),family=binomial,glmerControl(check.conv.singular="ignore"))
+summary(m)
+confint(m,method="Wald")[3:4,]
+```
+
+
+##### Partially Ambiguous Condition
+
+Estimating the preference for (partially) ambiguous items by re-centering the model on the partially ambiguous condition. The intercept represents the preference for selecting ambiguous items in the Partially Ambiguous condition.
+
+```{r, warning=F,message=F}
+d$conditionPartial <- ifelse(d$ambiguity_condition=="ambiguous",1,
+                            ifelse(d$ambiguity_condition=="partially ambiguous",0,NA))
+
+m <- glmer(isAmbiguous~conditionPartial+(1|subject)+(1|choiceImage),data=subset(d,experiment_name=="Experiment S1"&trialType=="selection"),family=binomial,glmerControl(check.conv.singular="ignore"))
+summary(m)
+confint(m,method="Wald")[3:4,]
+```
+
+#### Non-parametric test (Wilcoxon) {.tabset}
+
+##### Condition Comparison
+
+```{r, warning=F, message=F}
+##condition comparison
+wilcox.test(subset(subj_selection , ambiguity_condition=="ambiguous"&experiment_name=="Experiment S1")$prop_ambig_selection,
+            subset(subj_selection, ambiguity_condition=="partially ambiguous"&experiment_name=="Experiment S1")$prop_ambig_selection,
+            conf.int=T, conf.level=0.95)
+```
+
+##### Fully Ambiguous Condition
+
+```{r, warning=F, message=F}
+##Fully Ambiguous Condition
+wilcox.test(subset(subj_selection, experiment_name=="Experiment S1"&ambiguity_condition=="ambiguous")$prop_ambig_selection,mu=1/2, conf.int=T, conf.level=0.95)
+```
+
+##### Partially Ambiguous Condition
+
+```{r, warning=F, message=F}
+##Partially Ambiguous Condition
+wilcox.test(subset(subj_selection, experiment_name=="Experiment S1"&ambiguity_condition=="partially ambiguous")$prop_ambig_selection,mu=1/2, conf.int=T, conf.level=0.95)
+```
+
+### Test {.tabset}
+
+Analysis of learners' test performance.
+
+```{r, warning=F,message=F}
+##summarize participant accuracy by test half
+subj_test_half <- d %>%
+  filter(trialType=="test"&experiment_name=="Experiment S1") %>%
+  group_by(subject,experiment_name,ambiguity_condition, testHalf) %>%
+  summarize(
+    N=n(),
+    accuracy=mean(isRight,na.rm=T))
+##by item and test half
+subj_test_half_item <- d %>%
+  filter(trialType=="test"&experiment_name=="Experiment S1") %>%
+  group_by(subject,experiment_name,ambiguity_condition, testHalf,targetType,targetIsAmbiguous,targetIsAmbiguousYN) %>%
+  summarize(
+    N=n(),
+    accuracy=mean(isRight,na.rm=T))
+```
+
+
+#### Plot
+
+```{r, warning=F, message=F}
+#item summary within-subjects corrected CIs
+subj_summary_item_testhalf_correctedCIs_s1 <- summarySEwithin(
+  filter(
+    subj_test_half_item,
+    (experiment_name=="Experiment S1")),
+  "accuracy",
+  betweenvars=c("experiment_name","ambiguity_condition"),
+  withinvars=c("testHalf","targetIsAmbiguousYN"),
+  idvar="subject") %>%
+  mutate(
+    lower_ci = accuracy - ci,
+    upper_ci = accuracy + ci,
+    testHalf_name = paste("Test Block",testHalf,sep=" ")
+  )
+
+#Experiment S1 - test
+p_expS1_fulltest <- ggplot(filter(subj_summary_item_testhalf_correctedCIs_s1,ambiguity_condition=="ambiguous"),aes(x=targetIsAmbiguousYN,y=accuracy,color=targetIsAmbiguousYN,fill=targetIsAmbiguousYN))+
+  geom_bar(stat="identity",size=1.5,position=position_dodge(.53),width=0.5,alpha=0)+
+  geom_point(data=filter(subj_test_half_item,experiment_name=="Experiment S1"&ambiguity_condition=="ambiguous"),aes(fill=targetIsAmbiguousYN),alpha=0.5,position=position_jitterdodge(dodge.width=0.53,jitter.width=0.1,jitter.height=0.02))+
+  geom_errorbar(aes(ymin=lower_ci,ymax=upper_ci),width=0.0,size=0.8,position=position_dodge(.53))+
+  scale_color_manual(name="Item Type",
+                     limits=c("no","yes"),
+                     labels=c("disambiguated","ambiguous"),
+                     values=c("#4DAF4A","#E41A1C"))+
+  scale_fill_manual(name="Item Type",
+                    limits=c("no","yes"),
+                    labels=c("disambiguated","ambiguous"),
+                    values=c("#4DAF4A","#E41A1C"))+
+  scale_x_discrete(name = "Item Type\n\nFully Ambiguous Condition",
+                   limits=c("no","yes"),
+                   labels=c("disambig-\nuated","fully\nambiguous"))+
+  ylab("Test Accuracy")+
+  geom_hline(yintercept=1/8,linetype="dashed",size=1.1)+
+  theme_classic(base_size=12)+
+  theme(legend.position="none", axis.text.x=element_text(size=9))+
+  facet_wrap(~testHalf_name)
+
+p_expS1_partialtest <- ggplot(filter(subj_summary_item_testhalf_correctedCIs_s1, ambiguity_condition=="partially ambiguous"),aes(x=targetIsAmbiguousYN,y=accuracy,color=targetIsAmbiguousYN,fill=targetIsAmbiguousYN))+
+  geom_bar(stat="identity",size=1.5,position=position_dodge(.53),width=0.5,alpha=0)+
+  geom_point(data=filter(subj_test_half_item,experiment_name=="Experiment S1"&ambiguity_condition=="partially ambiguous"),aes(fill=targetIsAmbiguousYN),alpha=0.5,position=position_jitterdodge(dodge.width=0.53,jitter.width=0.1,jitter.height=0.02))+
+  geom_errorbar(aes(ymin=lower_ci,ymax=upper_ci),width=0.0,size=0.8,position=position_dodge(.53))+
+  scale_color_manual(name="Item Type",
+                     limits=c("no","yes"),
+                     labels=c("disambiguated","partially\nambiguous"),
+                     values=c("#4DAF4A","#377EB8"))+
+  scale_fill_manual(name="Item Type",
+                    limits=c("no","yes"),
+                    labels=c("disambiguated","partially\nambiguous"),
+                    values=c("#4DAF4A","#377EB8"))+
+  scale_x_discrete(name = "Item Type\n\nPartially Ambiguous Condition",
+                   limits=c("no","yes"),
+                   labels=c("disambig-\nuated","partially\nambiguous"))+
+  ylab("Test Accuracy")+
+  geom_hline(yintercept=1/8,linetype="dashed",size=1.1)+
+  theme_classic(base_size=12)+
+  theme(legend.position="none", axis.text.x=element_text(size=9))+
+  facet_wrap(~testHalf_name)
+plot_grid(p_expS1_fulltest,p_expS1_partialtest, labels=c("A","B"),rel_widths=c(1,1),label_size=24,nrow=1)
+```
+
+
+#### Descriptives
+
+##### Overall Test Accuracy
+
+Split by test half.
+
+```{r, warning=F,message=F}
+## descriptives
+subj_summary_test_s1 <-  summarySEwithin(
+  subj_test_half,
+  "accuracy",
+  betweenvars=c("experiment_name","ambiguity_condition"),
+  withinvars=c("testHalf"),
+  idvar="subject") %>%
+  mutate(
+    lower_ci = accuracy - ci,
+    upper_ci = accuracy + ci,
+    testHalf_name = paste("Test Block",testHalf,sep=" ")
+  ) %>%
+  select(-accuracy_norm,-se,-sd,-ci)
+  
+kable(subj_summary_test_s1)
+```
+
+##### Test Accuracy Split by Item
+
+Split by test half.
+
+```{r, warning=F,message=F}
+## split by item
+subj_summary_test_item_s1 <-  summarySEwithin(
+  subj_test_half_item,
+  "accuracy",
+  betweenvars=c("experiment_name","ambiguity_condition"),
+  withinvars=c("testHalf","targetIsAmbiguousYN"),
+  idvar="subject") %>%
+  mutate(
+    lower_ci = accuracy - ci,
+    upper_ci = accuracy + ci,
+    testHalf_name = paste("Test Block",testHalf,sep=" ")
+  ) %>%
+  select(-accuracy_norm,-se,-sd,-ci)
+
+kable(subj_summary_test_item_s1)
+```
+
+
+
+#### Logistic mixed-effects model
+
+##### Three-Way Interaction: Effects of Item Type and Test Half across Conditions
+
+```{r, warning=F,message=F}
+d$testHalfC <- ifelse(!is.na(d$testHalf) & d$testHalf==2,0.5,
+                      ifelse(!is.na(d$testHalf) & d$testHalf==1,-0.5,NA))
+
+#three-way interaction
+m <- glmer(isRight~targetIsAmbiguousC*conditionC*testHalfC+(1+targetIsAmbiguousC*testHalfC|subject)+(1|targetImage),data=filter(d,(experiment_name=="Experiment S1")&trialType=="test"&ambiguity_condition!="non ambiguous"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+summary(m)
+confint(m, method="Wald")[12:19,]
+```
+
+##### Specifically test the increase across test halfs for ambiguous items in the  Fully Ambiguous Condition
+
+```{r,warning=F,message=F}
+#test specifically test half increase for ambiguous items in the Fully Ambiguous condition
+d$targetIsAmbiguous_ambiguous <- ifelse(!is.na(d$targetIsAmbiguous) & d$targetIsAmbiguous==1,0,
+                                        ifelse(!is.na(d$targetIsAmbiguous) & d$targetIsAmbiguous==0,-1,NA))
+m <- glmer(isRight~targetIsAmbiguous_ambiguous*conditionFull*testHalfC+(1+targetIsAmbiguous_ambiguous*testHalfC|subject)+(1|targetImage),data=filter(d,(experiment_name=="Experiment S1")&trialType=="test"&ambiguity_condition!="non ambiguous"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+summary(m)
+confint(m, method="Wald")[12:19,]
+```
+
+#### Relationship between sampling and test performance
+
+##### Correlations in Test Half 1 and 2 between sampling preference and test accuracy
+
+Fully Ambiguous Condition - Test Block 1
+
+```{r, warning=F,message=F}
+#correlations Experiment S1: proportion ambiguous items selected and test accuracy
+subj_test_half <- subj_test_half %>% 
+  left_join(select(subj_selection,subject,prop_ambig_selection)) %>%
+  mutate(
+    testHalf_name = paste("Test Block",testHalf,sep=" "))
+
+#Fully Ambiguous - test block 1
+cor.test(subset(subj_test_half,ambiguity_condition=="ambiguous"&testHalf==1)$accuracy,subset(subj_test_half,ambiguity_condition=="ambiguous"&testHalf==1)$prop_ambig_selection)
+```
+
+Fully Ambiguous Condition - Test Block 2
+
+``` {r, warning=F,message=F}
+#Fully Ambiguous - test block 2
+cor.test(subset(subj_test_half,ambiguity_condition=="ambiguous"&testHalf==2)$accuracy,subset(subj_test_half,ambiguity_condition=="ambiguous"&testHalf==2)$prop_ambig_selection)
+```
+
+Partially Ambiguous Condition - Test Block 1
+
+```{r, warning=F,message=F}
+#Partially Ambiguous - test block 1
+cor.test(subset(subj_test_half,ambiguity_condition=="partially ambiguous"&testHalf==1)$accuracy,subset(subj_test_half,ambiguity_condition=="partially ambiguous"&testHalf==1)$prop_ambig_selection)
+```
+
+Partially Ambiguous Condition - Test Block 2
+
+``` {r, warning=F,message=F}
+#Partially Ambiguous - test block 2
+cor.test(subset(subj_test_half,ambiguity_condition=="partially ambiguous"&testHalf==2)$accuracy,subset(subj_test_half,ambiguity_condition=="partially ambiguous"&testHalf==2)$prop_ambig_selection)
+```
+
+##### Plot
+
+```{r, warning=F,message=F}
+#Experiment S1 - sampling-test
+pS1_fullsampling_test <- ggplot(filter(subj_test_half,ambiguity_condition=="ambiguous"),aes(prop_ambig_selection,accuracy, color=ambiguity_condition))+
+  geom_violin(aes(group=prop_ambig_selection),draw_quantiles=c(0.5))+
+  scale_color_manual(limits=c("ambiguous"),
+                     labels=c("fully ambiguous"),
+                     values=c("#E41A1C"))+
+  #geom_point(position=position_jitter(width=.05,height=.0))+
+  geom_smooth(method="lm",color="black",fill="#4B0082",alpha=0.3)+
+  theme_classic()+
+  #ylim(0,1.08)+
+  scale_x_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1))+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1),limits=c(0,1.08))+
+  theme_classic(base_size=12)+
+  ylab("Test Accuracy")+
+  theme(legend.position="none")+
+  xlab("Proportion of Ambiguous Selections\n\nFully Ambiguous Condition")+
+  facet_wrap(~testHalf_name)
+pS1_partialsampling_test <- ggplot(filter(subj_test_half,ambiguity_condition=="partially ambiguous"),aes(prop_ambig_selection,accuracy, color=ambiguity_condition))+
+  geom_violin(aes(group=prop_ambig_selection),draw_quantiles=c(0.5))+
+  scale_color_manual(limits=c("partially ambiguous"),
+                     labels=c("partially ambiguous"),
+                     values=c("#377EB8"))+
+  #geom_point(position=position_jitter(width=.05,height=.0))+
+  geom_smooth(method="lm",color="black",fill="#4B0082",alpha=0.3)+
+  theme_classic()+
+  #ylim(0,1.08)+
+  scale_x_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1))+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1),limits=c(0,1.08))+
+  theme_classic(base_size=12)+
+  ylab("Test Accuracy")+
+  theme(legend.position="none")+
+  xlab("Proportion of Ambiguous Selections\n\nPartially Ambiguous Condition")+
+  facet_wrap(~testHalf_name)
+plot_grid(pS1_fullsampling_test,pS1_partialsampling_test,labels=c("A","B"),rel_widths=c(1,1),label_size=24,nrow=1)
+```
+
+#### Increase in test accuracy related to sampling preference
+
+By including a test phase immediately preceding the Sampling Phase, we aimed to further understand the correlation between test accuracy and preference for selecting ambiguous items observed in Experiment 1. Specifically, do participants have higher test accuracy at the conclusion of the experiment because they preferentially selected ambiguous items, or do participants who are more successful at learning the object-label associations show a stronger preference for selecting ambiguous items?
+
+To test this question, we correlated participants’ proportion of ambiguous selections with their increase in accuracy from Test Block 1 to Test Block 2. If participants’ ambiguous selections are driving higher accuracy, then participants who show a preference for sampling ambiguous items should show the largest increases in accuracy from Test Block 1 to Test Block 2. However, proportion of ambiguous items selected was not significantly correlated with an increase in test accuracy in the Fully Ambiguous condition and negatively correlated in the Partially Ambiguous condition, i.e. participants who were more likely to select the (partially) ambiguous items showed a lesser increase in test accuracy. 
+
+```{r, warning=F,message=F}
+#increase in accuracy block 1 to 2
+subj_test_half_wide <- subj_test_half %>%
+  select(-testHalf_name) %>%
+  pivot_wider(names_from=testHalf,values_from=accuracy,names_prefix="test_block_") %>%
+  mutate(accuracy_increase=test_block_2-test_block_1)
+
+ggplot(filter(subj_test_half_wide,experiment_name=="Experiment S1"),aes(prop_ambig_selection,accuracy_increase))+
+  geom_jitter()+
+  geom_smooth(method="lm")+
+  facet_wrap(~ambiguity_condition)
+```
+
+##### Fully Ambiguous Condition - Correlation between accuracy increase and sampling preference
+
+```{r, warning=F,message=F}
+#Fully Ambiguous - accuracy increase
+cor.test(subset(subj_test_half_wide,ambiguity_condition=="ambiguous"&experiment_name=="Experiment S1")$accuracy_increase,subset(subj_test_half_wide,ambiguity_condition=="ambiguous"&experiment_name=="Experiment S1")$prop_ambig_selection)
+```
+
+##### Partially Ambiguous Condition - Correlation between accuracy increase and sampling preference
+
+``` {r, warning=F,message=F}
+#Partially Ambiguous - increase
+cor.test(subset(subj_test_half_wide,ambiguity_condition=="partially ambiguous"&experiment_name=="Experiment S1")$accuracy_increase,subset(subj_test_half_wide,ambiguity_condition=="partially ambiguous"&experiment_name=="Experiment S1")$prop_ambig_selection)
+```
+
+#####  By Test Item (plot)
+
+```{r, warning=F,message=F}
+#by item
+subj_test_half_item <- subj_test_half_item %>% 
+  left_join(select(subj_selection,subject,prop_ambig_selection))
+
+subj_test_half_item_wide <- subj_test_half_item %>%
+  pivot_wider(names_from=testHalf,values_from=accuracy,names_prefix="test_block_") %>%
+  mutate(accuracy_increase=test_block_2-test_block_1)
+
+ggplot(subj_test_half_item_wide,aes(prop_ambig_selection,accuracy_increase))+
+  geom_jitter()+
+  geom_smooth(method="lm")+
+  facet_wrap(~ambiguity_condition+targetIsAmbiguousYN)
+```
+
