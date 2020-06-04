@@ -1,0 +1,674 @@
+<!doctype html>
+<html>
+
+<head>
+  	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" >
+  	<script src="js/jquery.min.js"></script>
+	<script src="js/jquery-ui.min.js"></script>
+  	<script src="js/snap.svg-min.js"></script> 
+  	<script src="js/jspsych.js"></script>
+  	<script src="jspsych-crossact-learning.js"></script>
+	<script src="jspsych-crossact-learning-iti.js"></script>
+	<script src="jspsych-crossact-prompt.js"></script>
+	<script src="jspsych-production-test-singlepic.js"></script>
+	<script src="jspsych-crossact-test.js"></script>
+	<script src="jspsych-crossact-naming.js"></script>
+	<script src="jspsych-selection-learning.js"></script>
+  	<script src="plugins/jspsych-button-response.js"></script>
+    <link rel="stylesheet" href="css/jspsych.css"></link>
+	<link rel="stylesheet" href="css/jquery-ui.css"></link>
+    <link rel="stylesheet" href="css/crossact.css"></link>
+</head>
+
+<body>
+  <div id="jspsych-target"></div>
+</body>
+<script>
+	
+$('body,html').addClass('stop-scrolling');
+
+// ORGANIZE SUBJECT ID & GENERAL PARAMETERS
+
+//Enter subject id
+var subject_id = prompt("Enter subject id", "test");
+//var input = prompt("Enter input type (touch or click)","click");
+//
+// var inputType="";
+// if (input=="touch") {
+// 	inputType="touch";
+// } else {
+// 	inputType="click";
+// }
+//var trials = prompt("Enter trials to demo (full, training, selection, test)","full");
+var trials="full";
+var input = prompt("Touch or click", "touch");
+
+subject_id.replace(/[^A-Za-z0-9_]/g, "");
+
+// record the condition assignment in the jsPsych data
+// this adds a property called 'subject', a property called workerId, and a condition property
+jsPsych.data.addProperties({
+	subject: subject_id,
+});
+
+var timeline = [];
+
+// DEFINE AND RANDOMIZE STIMULI
+//familiarization items
+var famNovelWords = ["deela","sibu"];
+var famNovelItems = ["stims/17.png","stims/21.png"];
+
+var famNovelWordsShuffled=jsPsych.randomization.shuffle(famNovelWords);
+var famNovelItemsShuffled=jsPsych.randomization.shuffle(famNovelItems);
+
+var famIndex = jsPsych.randomization.shuffle([0,1]);
+var famWordItemsList = ["cow","monkey"];
+var famItemsList = ["stims/cow.png","stims/monkey.png"];
+var famWordItems = [famWordItemsList[famIndex[0]],famWordItemsList[famIndex[1]]];
+var famItems = [famItemsList[famIndex[0]],famItemsList[famIndex[1]]];
+
+var famAllWords = famWordItems.concat(famNovelWords);
+var famAllItems = famItems.concat(famNovelItems);
+
+//all items
+var allNovelWords = ["biffer","guffi", "leemu", "tibble"];
+
+//define image items
+var allNovelItems = ["stims/10.png","stims/13.png","stims/18.png","stims/30.png"];
+
+//shuffle images and words	
+var allNovelItemsShuffled=jsPsych.randomization.shuffle(allNovelItems);
+var allNovelWordsShuffled = jsPsych.randomization.shuffle(allNovelWords);
+
+//familiar items
+var knownIndex = jsPsych.randomization.shuffle([0,1]);
+var knownWordItemsList = ["pig","dog"];
+var knownItemsList = ["stims/pig.png","stims/dog.png"];
+var knownWordItems = [knownWordItemsList[knownIndex[0]],knownWordItemsList[knownIndex[1]]];
+var knownItems = [knownItemsList[knownIndex[0]],knownItemsList[knownIndex[1]]];
+
+//combine items
+var wordItems = knownWordItems.concat(allNovelWordsShuffled);
+var objectItems = knownItems.concat(allNovelItemsShuffled);
+
+var allWords = famAllWords.concat(wordItems);
+var allObjects = famAllItems.concat(objectItems);
+
+//stim names
+var stimNames = [];
+for (i=0; i<wordItems.length; i++){
+	name = "stim"+ i
+	stimNames.push(name)
+};
+
+//associate words and items (images) in a dictionary
+var stims = {};
+for (i =0; i<wordItems.length; i++) {
+	//convert each item to a dictionary containing the image and the word // use normally
+	curObject = {image: objectItems[i], word: wordItems[i]};
+	//add this dictionary to the overall stimulus dictionary
+	stims[stimNames[i]] = curObject;
+};
+
+	
+//define prompt trial
+var trialPrompt = {
+	type: 'crossact-prompt',
+	responseKind: input,
+	data: {trialType: "prompt"}
+};
+
+//Familiarization
+//// DEFINE Naming Trial
+
+// to balance where the target is on each trial
+var locationNameList=[0,1,2,3];
+var nameLocationList=jsPsych.randomization.shuffle(locationNameList);
+		
+var famNameImages = [
+	famAllItems[0],
+	famAllItems[1],
+	famAllItems[2],
+	famAllItems[3],
+];
+var famNameWords = [
+	famAllWords[0],
+	famAllWords[1],
+	famAllWords[2],
+	famAllWords[3]
+];
+
+var famNameWordsShuffled = jsPsych.randomization.shuffle(famNameWords);
+
+		
+	var famNamingTrial = {
+		type: 'crossact-naming',
+		image1: famNameImages[0],
+		image2: famNameImages[1],
+		image3: famNameImages[2],
+		image4: famNameImages[3],
+		name1: "stims/"+famNameWordsShuffled[0]+".m4a",
+		name2: "stims/"+famNameWordsShuffled[1]+".m4a",
+		name3: "stims/"+famNameWordsShuffled[2]+".m4a",
+		name4: "stims/"+famNameWordsShuffled[3]+".m4a",
+		curLocationList: curLocationList,
+		imageList: nameImages,
+		wordList: famNameWordsShuffled,
+		objectNum: 4,
+		data: {trialNum: 1, trialType: "fam-naming"}
+	};
+
+//training trials
+var famTrainingTrials = [[0,2],[1,3],[2,0],[3,1]];
+famWordOrderShuffling=jsPsych.randomization.shuffle([[[0,1],[1,0]],[[1,0],[0,1]]]);
+var famWordOrder = famWordOrderShuffling[0].concat(famWordOrderShuffling[1]);
+
+famTrainingNum=0;
+var famTrainingList =[];
+famTrainingList.push(trialPrompt);
+famTrainingList.push(famNamingTrial);
+famTrainingList.push(trialPrompt);
+// the actual block of Cross sit training trials
+for (i =0; i < famTrainingTrials.length; i++) {
+	famTrainingNum++;
+	
+ 	var trialStart = {
+		type: 'learning-iti',
+		data: {trialNum: famTrainingNum, trialType: "fam-learning-start"}
+	};
+	
+ 	var trial = {
+		type: 'learning',
+		location1: "left",
+		location2: "right",
+		im1: famAllItems[famTrainingTrials[i][0]],
+		im2: famAllItems[famTrainingTrials[i][1]],
+		label1: famAllWords[famTrainingTrials[i][famWordOrder[i][0]]],
+	 	label2: famAllWords[famTrainingTrials[i][famWordOrder[i][1]]],
+	 	audio1: "stims/"+famAllWords[famTrainingTrials[i][famWordOrder[i][0]]]+".m4a",
+	 	audio2: "stims/"+famAllWords[famTrainingTrials[i][famWordOrder[i][1]]]+".m4a",
+		repeat: "true",
+		data: {trialNum: famTrainingNum, trialType: "fam-learning"}
+	};
+	famTrainingList.push(trialStart);
+	famTrainingList.push(trial);
+};
+
+//Practice selection trials
+var numLabelFamSelectTrials = 2;
+// to balance where the target is on each trial
+var locationsFamTest = [];
+var locationFamTestList=[0,1,2,3];
+var famChoiceTypeList = ["familiar","familiar","novel","novel"]
+
+var curLocationFamList=jsPsych.randomization.shuffle(locationFamTestList);
+var famSelectNum=0;
+var famSelectList = [];
+famSelectList.push(trialPrompt);
+for (j =0; j < numLabelFamSelectTrials; j++) {
+	famSelectNum++;
+	
+	curImages = [
+		famAllItems[curLocationFamList[0]],
+		famAllItems[curLocationFamList[1]],
+		famAllItems[curLocationFamList[2]],
+		famAllItems[curLocationFamList[3]]
+	];
+	
+	curWords = [
+		famAllWords[curLocationFamList[0]],
+		famAllWords[curLocationFamList[1]],
+		famAllWords[curLocationFamList[2]],
+		famAllWords[curLocationFamList[3]]
+	];
+	
+	
+	
+	var select = {
+		type: 'selection-learning',
+			image1: curImages[0],
+			image2: curImages[1],
+			image3: curImages[2],
+			image4: curImages[3],
+			label1: curWords[0],
+			label2: curWords[1],
+			label3: curWords[2],
+			label4: curWords[3],
+		choiceTypeList: [
+			famChoiceTypeList[curLocationFamList[0]],
+			famChoiceTypeList[curLocationFamList[1]],
+			famChoiceTypeList[curLocationFamList[2]],
+			famChoiceTypeList[curLocationFamList[3]]],
+		curLocationList: curLocationFamList,
+		learningPos: "center",
+			imageList: curImages,
+			wordList: curWords,
+			objectNum: 4,
+    	data: {trialNum: famSelectNum, trialType: "fam-selection"}
+	};
+	famSelectList.push(select);
+};
+
+//PracticeTestTrials
+
+var famTestList=[];
+famTestList.push(trialPrompt);
+var famTestTrialsIndex=[0,1,2,3];
+var famTestNum=1;
+
+//test trials
+
+// to balance where the target is on each trial
+var locationsTest = [];
+var famLocationTestList=[0,1,2,3];
+
+var famTestOrderIndex = jsPsych.randomization.shuffle(famTestTrialsIndex);
+	
+for (j =0; j < famTestTrialsIndex.length; j++) {
+		
+	var curFamTargetIndex=famTestOrderIndex[j];
+	var curFamLocationList=jsPsych.randomization.shuffle(famLocationTestList);
+	
+	curImages = [
+		famAllItems[curFamLocationList[0]],
+		famAllItems[curFamLocationList[1]],
+		famAllItems[curFamLocationList[2]],
+		famAllItems[curFamLocationList[3]]
+	];
+	
+	curWords = [
+		famAllWords[curFamLocationList[0]],
+		famAllWords[curFamLocationList[1]],
+		famAllWords[curFamLocationList[2]],
+		famAllWords[curFamLocationList[3]]
+	];
+	
+	var test = {
+		type: 'crossact-test',
+			image1: curImages[0],
+			image2: curImages[1],
+			image3: curImages[2],
+			image4: curImages[3],
+		curLocationList: curFamLocationList,
+		objectNum: 4,
+		imageList: curImages,
+		wordList: curWords,
+		audioStim: "stims/find_" + famAllWords[curFamTargetIndex] + ".m4a",
+		label: famAllWords[curFamTargetIndex],
+		targetLocation: curFamTargetIndex,
+		targetImage: famAllItems[curFamTargetIndex],
+    	data: {trialNum: famTestNum, trialType: "fam-test"}
+	};
+	
+	famTestList.push(test);
+	famTestNum++;
+};
+
+var famTimeline = famTrainingList;
+famTimeline = famTimeline.concat(famSelectList);
+famTimeline = famTimeline.concat(famTestList);
+
+
+///TEST
+//// DEFINE Naming Trial
+
+// to balance where the target is on each trial
+var locationsName = [];
+var locationNameList=[0,1,2,3,4,5];
+
+var nameLocationList=jsPsych.randomization.shuffle(locationNameList);
+		
+var nameImages = [
+	stims[stimNames[nameLocationList[0]]]["image"],
+	stims[stimNames[nameLocationList[1]]]["image"],
+	stims[stimNames[nameLocationList[2]]]["image"],
+	stims[stimNames[nameLocationList[3]]]["image"],
+	stims[stimNames[nameLocationList[4]]]["image"],
+	stims[stimNames[nameLocationList[5]]]["image"]
+];
+var nameWords = [
+	stims[stimNames[nameLocationList[0]]]["word"],
+	stims[stimNames[nameLocationList[1]]]["word"],
+	stims[stimNames[nameLocationList[2]]]["word"],
+	stims[stimNames[nameLocationList[3]]]["word"],
+	stims[stimNames[nameLocationList[4]]]["word"],
+	stims[stimNames[nameLocationList[5]]]["word"]
+];
+
+var nameWordsShuffled = jsPsych.randomization.shuffle(nameWords);
+
+		
+var namingTrial = {
+		type: 'crossact-naming',
+		image1: nameImages[0],
+		image2: nameImages[1],
+		image3: nameImages[2],
+		image4: nameImages[3],
+		image5: nameImages[4],
+		image6: nameImages[5],
+		name1: "stims/"+nameWordsShuffled[0]+".m4a",
+		name2: "stims/"+nameWordsShuffled[1]+".m4a",
+		name3: "stims/"+nameWordsShuffled[2]+".m4a",
+		name4: "stims/"+nameWordsShuffled[3]+".m4a",
+		name5: "stims/"+nameWordsShuffled[4]+".m4a",
+		name6: "stims/"+nameWordsShuffled[5]+".m4a",
+		curLocationList: curLocationList,
+		imageList: nameImages,
+		wordList: nameWordsShuffled,
+		objectNum: 6,
+	responseKind: input,
+		data: {trialNum: 1, trialType: "naming"}
+};
+
+// DEFINE TRAINING TRIALS
+//training trials
+var trainingList = [];
+trainingList.push(trialPrompt);
+trainingList.push(namingTrial);
+trainingList.push(trialPrompt);
+
+var numTB = 3  // number of Training Blocks
+//define specific stimuli combinations, depending on condition
+specifiedStimBlock = [[0,2],[1,3],[4,5]];
+
+var wordOrderList = [[0,1],[1,0],[0,1],[1,0]];
+var locationList = [["left","right"],["right","left"],["left","right"],["right","left"]];
+
+var randomizedOrderStimBlock= [];
+for (i =0; i<specifiedStimBlock.length; i++) {
+	curWordList=jsPsych.randomization.shuffle(wordOrderList);
+	curLocationList = jsPsych.randomization.shuffle(locationList);
+	curBlockTrial= [specifiedStimBlock[i]]
+	curBlockTrial.push(curWordList);
+	console.log(curBlockTrial)
+	curBlockTrial.push(curLocationList);
+	randomizedOrderStimBlock.push(curBlockTrial);
+};
+
+console.log(randomizedOrderStimBlock);
+
+//var specifiedStimShuffled = jsPsych.randomization.shuffle(specifiedStim); // shuffle this list
+var numTrialsCTB = 3; // nr of trials per Cross sit training block
+var trainingNum = 1; // counter for trialnr
+
+for (j = 0; j < numTB;  j++){
+	// initialize list for this block of training trials
+	var trainingCTBList = [];
+	var CTBlist = jsPsych.randomization.shuffle(randomizedOrderStimBlock);
+	console.log(CTBlist);
+
+	// the actual block of Cross sit training trials
+	for (i =0; i < numTrialsCTB; i++) {
+		trainingNum++;
+		var currentStims = CTBlist[i];
+		console.log(currentStims);
+		//var locationShuffled = jsPsych.randomization.shuffle(possibleLocations);
+		//var wordOrderShuffled = jsPsych.randomization.shuffle(wordOrderDummy);
+		
+	 	var trialStart = {
+ 			type: 'learning-iti',
+    		data: {trialNum: trainingNum, trialType: "learning-start"}
+ 		};
+		console.log(currentStims[1][j][0]);
+		console.log(currentStims[currentStims[1][j][0]])
+	 	var trial = {
+ 			type: 'learning',
+ 			location1: currentStims[2][j][0],
+ 			location2: currentStims[2][j][1],
+ 			im1: stims[stimNames[currentStims[0][0]]]["image"],
+ 			im2: stims[stimNames[currentStims[0][1]]]["image"],
+    		label1: stims[stimNames[currentStims[0][currentStims[1][j][0]]]]["word"],
+		 	label2: stims[stimNames[currentStims[0][currentStims[1][j][1]]]]["word"],
+		 	audio1: "stims/"+stims[stimNames[currentStims[0][currentStims[1][j][0]]]]["word"]+".m4a",
+		 	audio2: "stims/"+stims[stimNames[currentStims[0][currentStims[1][j][1]]]]["word"]+".m4a",
+			repeat: "true",
+			responseKind: input,
+    		data: {trialNum: trainingNum, trialType: "learning"}
+ 		};
+		trainingCTBList.push(trialStart);
+		trainingCTBList.push(trial);
+	};
+	trainingList=trainingList.concat(trainingCTBList);
+};
+
+
+//Selection learning
+
+var selectList=[];
+selectList.push(trialPrompt);
+var numLabelSelectTrialsPerBlock = 2;
+var numSelectBlocks = 1;
+var selectNum = 1;
+
+//selection trials
+
+// to balance where the target is on each trial
+var locationsTest = [];
+var itemList = [2,3,4,5]
+var locationTestList=[0,1,2,3];
+var choiceTypeList = ["ME","ME","ambiguous","ambiguous"]
+
+var curLocationList=jsPsych.randomization.shuffle(locationTestList);
+
+for (i =0; i < numSelectBlocks; i++) {
+	
+	for (j =0; j < numLabelSelectTrialsPerBlock; j++) {
+		
+	curImages = [
+		stims[stimNames[itemList[curLocationList[0]]]]["image"],
+		stims[stimNames[itemList[curLocationList[1]]]]["image"],
+		stims[stimNames[itemList[curLocationList[2]]]]["image"],
+		stims[stimNames[itemList[curLocationList[3]]]]["image"]];
+	
+	curWords = [
+		stims[stimNames[itemList[curLocationList[0]]]]["word"],
+		stims[stimNames[itemList[curLocationList[1]]]]["word"],
+		stims[stimNames[itemList[curLocationList[2]]]]["word"],
+		stims[stimNames[itemList[curLocationList[3]]]]["word"]
+	];
+		
+	var select = {
+		type: 'selection-learning',
+			image1: curImages[0],
+			image2: curImages[1],
+			image3: curImages[2],
+			image4: curImages[3],
+			label1: curWords[0],
+			label2: curWords[1],
+			label3: curWords[2],
+			label4: curWords[3],
+		choiceTypeList: [
+			choiceTypeList[curLocationList[0]],
+			choiceTypeList[curLocationList[1]],
+			choiceTypeList[curLocationList[2]],
+			choiceTypeList[curLocationList[3]]],
+		curLocationList: curLocationList,
+				imageList: curImages,
+			wordList: curWords,
+		learningPos: "center",
+			objectNum: 4,
+			responseKind: input,
+		choices: ['START'],
+    	data: {trialNum: selectNum, trialType: "selection"}
+	};
+	
+	selectList.push(select);
+	selectNum++;
+};
+};
+
+console.log(selectList);
+
+// DEFINE TEST TRIALS 
+
+var testList=[];
+testList.push(trialPrompt);
+var numLabelTestTrialsPerBlock = 6;
+var testTrialsIndex=[0,1,2,3,4,5];
+var numTestBlocks = 1;
+testNum=1;
+
+//test trials
+
+// to balance where the target is on each trial
+var locationsTest = [];
+var locationTestList=[0,1,2,3,4,5];
+
+
+
+for (i =0; i < numTestBlocks; i++) {
+	
+	curTestOrderIndex = jsPsych.randomization.shuffle(testTrialsIndex);
+	
+	for (j =0; j < curTestOrderIndex.length; j++) {
+		
+		var curTargetIndex=curTestOrderIndex[j];
+		var curLocationList=jsPsych.randomization.shuffle(locationTestList);
+		
+		curImages = [
+			stims[stimNames[curLocationList[0]]]["image"],
+			stims[stimNames[curLocationList[1]]]["image"],
+			stims[stimNames[curLocationList[2]]]["image"],
+			stims[stimNames[curLocationList[3]]]["image"],
+			stims[stimNames[curLocationList[4]]]["image"],
+			stims[stimNames[curLocationList[5]]]["image"]
+		];
+		
+		curWords = [
+			stims[stimNames[curLocationList[0]]]["word"],
+			stims[stimNames[curLocationList[1]]]["word"],
+			stims[stimNames[curLocationList[2]]]["word"],
+			stims[stimNames[curLocationList[3]]]["word"],
+			stims[stimNames[curLocationList[4]]]["word"],
+			stims[stimNames[curLocationList[5]]]["word"]
+		];
+		
+	var test = {
+		type: 'crossact-test',
+		image1: curImages[0],
+		image2: curImages[1],
+		image3: curImages[2],
+		image4: curImages[3],
+		image5: curImages[4],
+		image6: curImages[5],
+		curLocationList: curLocationList,
+		imageList: curImages,
+		wordList: curWords,
+		audioStim: "stims/find_" + stims[stimNames[curTargetIndex]]["word"] + ".m4a",
+		label: stims[stimNames[curTargetIndex]]["word"],
+		targetLocation: curTargetIndex,
+		targetImage: stims[stimNames[curTargetIndex]]["image"],
+		responseKind: input,
+    	data: {trialNum: testNum, trialType: "test"}
+	};
+	
+	testList.push(test);
+	testNum++;
+};
+};
+
+var timeline = famTimeline;
+
+//combine all trials into timeline
+if (trials == "full") {
+	timeline = timeline.concat(trainingList);
+	timeline = timeline.concat(selectList);
+	timeline = timeline.concat(testList);
+	//timeline=timeline.concat(prodTestList);
+} else if (trials == "training") {
+	timeline = trainingList;
+} else if (trials == "selection") {
+	timeline = selectList;
+} else if (trials == "test") {
+	timeline = testList;
+} else {
+	timeline = timeline.concat(trainingList);
+	timeline=timeline.concat(selectList);
+	timeline=timeline.concat(testList);
+}
+
+// PRELOADING
+// this should be handled within the plugins, but I've gotten mixed results relying on this,
+// so to be extra sure, preload all relevant files prior to starting the experiment
+
+ 
+//preload all images
+var imageSet = allObjects;
+imageSet.push("stims/Bear_Smile.png");
+imageSet.push("stims/Bear_Talk.png");
+imageSet.push("stims/space_helmet.png");
+
+//preload audio (if audio gets added at some later point)  
+var allAudio = [];
+for (var i = 2; i < allWords.length; i++) {
+	allAudio.push("stims/"+allWords[i]+".m4a");
+	allAudio.push("stims/find_"+allWords[i]+".m4a");
+};
+
+allAudio.push("stims/bleep.wav");
+console.log(allAudio);
+ 
+//function for tracking loading of audio files
+//useful if there are a lot of audio files 
+function updateLoadedCount(nLoaded){
+     var percentcomplete = nLoaded / allAudio.length * 100;
+
+     // could put something fancier here, like a progress bar
+     // or updating text in the DOM.
+     console.log('Loaded '+percentcomplete+'% of audio files');
+ }
+
+//run this line instead if we add audio
+jsPsych.pluginAPI.preloadImages(imageSet, function(){ jsPsych.pluginAPI.preloadAudioFiles(allAudio, function() {startExperiment(); },function(nLoaded) { updateLoadedCount(nLoaded); });});
+
+  
+// START & RUN EXPERIMENT
+// including functions that handle storing the data
+
+//function for Javascript-PHP communication
+function saveData(filename, filedata){
+	$.ajax({
+		type:'post',
+		cache: false,
+		url: 'save_data.php', // this is the path to the PHP script for storing the data
+		data: {filename: filename, filedata: filedata}
+	});
+};
+
+//function to initialize the experiment; will be called once all images are preloaded
+function startExperiment(){
+	jsPsych.init({
+		display_element: $('#jspsych-target'),
+		timeline: timeline,
+		show_progress_bar: false,
+		fullscreen: true,
+		default_iti: 0,
+		on_finish: function(data) {
+			//for testing: display data and store locally
+			jsPsych.data.displayData("csv");
+			//jsPsych.data.localSave("Crossact_v4_"+subject_id+".csv", "csv");
+			//below script is for storing data locally once the experiment is online
+			//saveData("Crossact_v4_"+subject_id+".csv", jsPsych.data.dataAsCSV());
+			//save_data('crossact','V4',subject_id, jsPsych.data.dataAsCSV());
+		}
+	});
+};
+
+function save_data(experiment, version,identifier, data){
+	$.ajax({
+		type: 'post',
+		cache: false,
+		url: 'https://data.infantlearning.waisman.wisc.edu/infantdb/datastore/save/',
+		data: {
+			experiment: experiment,
+	version: version,
+			identifier: identifier,
+			data: data
+		}
+	})
+};
+  
+  
+</script>
+
+</html>
