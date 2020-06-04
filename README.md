@@ -14,7 +14,7 @@ https://osf.io/udmvh/
 
 Here is a direct link to the html rendering of the R Markdown file in the analysis folder. This provides a walkthrough of the major analyses in the paper.
 
-https://mzettersten.github.io/crossSitAct/analysis/Crossact.html
+https://mzettersten.github.io/crossAct/analysis/Crossact.html
 
 ## Contents
 
