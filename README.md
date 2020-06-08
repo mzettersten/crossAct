@@ -36,7 +36,7 @@ This folder contains analysis scripts:
 
 - **Crossact.html**: Output of the R markdown script (open in a browser)
 
--**summarizeData.R**: Helper script for averaging data and computing CIs
+- **summarizeData.R**: Helper script for averaging data and computing CIs
 
 ### figures
 
