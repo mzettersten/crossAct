@@ -698,6 +698,26 @@ summary(m)
 confint(m, method="Wald")[5:8,]
 ```
 
+##### Correlation between overall sampling preference and test accuracy
+
+```{r, warning=F, message=F}
+## preference for sampling ambiguous items and test performance
+cor.test(subset(subj_selection,ambiguity_condition=="ambiguous"&experiment_name=="Experiment 2")$accuracy,subset(subj_selection,ambiguity_condition=="ambiguous"&experiment_name=="Experiment 2")$prop_ambig_selection)
+##plot
+ggplot(filter(subj_selection,experiment_name=="Experiment 2"),aes(prop_ambig_selection,accuracy, color=ambiguity_condition))+
+  geom_violin(aes(group=prop_ambig_selection),draw_quantiles=c(0.5))+
+  geom_dotplot(aes(group=prop_ambig_selection,fill=ambiguity_condition),alpha=0.6,binaxis="y",stackdir="center",dotsize=0.8)+
+  scale_color_manual(limits=c("ambiguous"),
+                     values=c("#E41A1C"))+
+  geom_smooth(method="lm",color="black",fill="#4B0082",alpha=0.3)+
+  theme_classic()+
+  scale_x_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1))+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1),limits=c(0,1.08))+
+  theme_classic(base_size=24)+
+  ylab("Test Accuracy")+
+  theme(legend.position="none")+
+  xlab("Probability of \nAmbiguous Selection")
+```
 
 ## Experiment 3
 
@@ -941,6 +961,29 @@ m <- glmer(isRight~targetIsAmbiguousC*chosenC+(1+targetIsAmbiguousC|subject)+(1|
 summary(m)
 confint(m, method="Wald")[5:8,]
 ```
+
+##### Correlation between overall sampling preference and test accuracy
+
+```{r, warning=F, message=F}
+##relationship between sampling preference for ambiguous items and test accuracy
+cor.test(subset(subj_selection,ambiguity_condition=="ambiguous_me"&experiment_name=="Experiment 3")$accuracy,subset(subj_selection,ambiguity_condition=="ambiguous_me"&experiment_name=="Experiment 3")$prop_ambig_selection)
+
+##plot
+ggplot(filter(subj_selection,experiment_name=="Experiment 3"),aes(prop_ambig_selection,accuracy, color=ambiguity_condition))+
+  geom_violin(aes(group=prop_ambig_selection),draw_quantiles=c(0.5))+
+  geom_dotplot(aes(group=prop_ambig_selection,fill=ambiguity_condition),alpha=0.6,binaxis="y",stackdir="center",dotsize=0.8)+
+  scale_color_manual(limits=c("ambiguous_me"),
+                     values=c("#E41A1C"))+
+  geom_smooth(method="lm",color="black",fill="#4B0082",alpha=0.3)+
+  theme_classic()+
+  scale_x_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1))+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1),limits=c(0,1.08))+
+  theme_classic(base_size=24)+
+  ylab("Test Accuracy")+
+  theme(legend.position="none")+
+  xlab("Probability of \nAmbiguous Selection")
+```
+
 
 ## Experiment S1
 
