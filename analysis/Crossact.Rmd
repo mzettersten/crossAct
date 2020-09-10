@@ -29,6 +29,8 @@ Analysis walkthrough for the paper "Sampling to learn words:
 Adults and children sample words that reduce referential ambiguity
 " (Author names removed, 2019).
 
+For more background information and the underlying data, visit the OSF repository for this report: [OSF site](https://osf.io/udmvh/?view_only=b9b8a986fd3a4235a073ec35d70a2266)
+
 See crossact_codebook for information about individual columns.
 
 ## Reading in data and preliminary processing
