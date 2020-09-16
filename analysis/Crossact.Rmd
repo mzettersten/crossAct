@@ -118,7 +118,7 @@ d %>%
 
 ### Experiment 3 {.tabset}
 
-Note that we currently missing some demographic information (ethnicity & language) for 6 of the 56 participants, due to experimenter error.
+Note that we are currently missing some demographic information (ethnicity & language) for 6 of the 56 participants, due to experimenter error.
 
 #### Gender, Age, Native Language
 
