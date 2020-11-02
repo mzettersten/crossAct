@@ -53,7 +53,7 @@ The experiment scripts folder contains the scripts for the html/ javascript-base
 
 ## Questions
 
-Feel free to contact me at **zettersten@wisc.edu** if you have any comments or questions about the data or the analyses.
+Feel free to contact me at **martincz@princeton.edu** if you have any comments or questions about the data or the analyses.
 
 
 
