@@ -1,7 +1,7 @@
 #load packages
 library(here)
-#set data path
-data_path <- here("data","Crossact_data.csv")
+#set data path #version 0.1
+data_path <- here::here("data","Crossact_data.csv")
 source('summarizeData.R') #helper functions, from R cookbook (http://www.cookbook-r.com/Graphs/Plotting_means_and_error_bars_(ggplot2)/)
 library(tidyverse) #version 1.2.1
 library(cowplot) #version 1.0.0
@@ -10,7 +10,6 @@ library(lme4) #version 1.1-21
 library(car) #version 3.0-3
 library(AICcmodavg) #version 2.2-2
 library(ggstance) #version 0.3.3
-library(DT) #version 0.8
 
 #### Read in Data ####
 d <- read.csv(data_path)
@@ -162,10 +161,15 @@ subj_summary_test_item_1 <-  summarySEwithin(
   select(-accuracy_norm,-sd,-se,-ci)
 subj_summary_test_item_1
 
+## testing overall accuracy against chance
+d$offset.125 <- 1/8
+m <- glmer(isRight~offset(logit(offset.125))+(1|subject)+(1|targetImage),data=filter(d,experiment_name=="Experiment 1"&trialType=="test"),family=binomial,glmerControl(optimizer="bobyqa"))
+summary(m)
+
 ## testing difference between items
 d$targetIsAmbiguousC <- ifelse(!is.na(d$targetIsAmbiguous) & d$targetIsAmbiguous==1,0.5,
                                         ifelse(!is.na(d$targetIsAmbiguous) & d$targetIsAmbiguous==0,-0.5,NA))
-m <- glmer(isRight~targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=filter(d,(experiment_name=="Experiment 1")&trialType=="test"),family=binomial,glmerControl(optimizer="bobyqa"))
+m <- glmer(isRight~offset(logit(offset.125))+targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=filter(d,(experiment_name=="Experiment 1")&trialType=="test"),family=binomial,glmerControl(optimizer="bobyqa"))
 summary(m)
 confint(m, method="Wald")
 
@@ -190,6 +194,7 @@ ggplot(subj_summary_test_item_1,aes(x=targetIsAmbiguousYN,y=accuracy,color=targe
   theme_classic(base_size=16)+
   theme(legend.position="none", axis.text.x=element_text(size=15))
 ggsave("../figures/exp1_test_by_item.pdf",width=11, height=7,dpi=600)
+ggsave("../figures/exp1_test_by_item.png",width=11, height=7,dpi=600)
 #ggsave("../figures/exp1_test_by_item.tiff",width=11, height=7)
 
 ## Relationship between sampling and test accuracy
@@ -197,7 +202,12 @@ ggsave("../figures/exp1_test_by_item.pdf",width=11, height=7,dpi=600)
 subj_selection <- subj_selection %>%
   left_join(subj_test,by=c("subject","experiment_name","ambiguity_condition"))
 
-#correlation between preference for sampling ambiguous items and test performance
+#join sampling and test by item
+subj_selection_item <- subj_selection %>%
+  rename(overall_test_accuracy=accuracy) %>%
+  left_join(subj_test_item,by=c("subject","experiment_name","ambiguity_condition"))
+
+#correlation between preference for sampling ambiguous items and overall test performance
 cor.test(subset(subj_selection,ambiguity_condition=="ambiguous"&experiment_name=="Experiment 1")$accuracy,subset(subj_selection,ambiguity_condition=="ambiguous"&experiment_name=="Experiment 1")$prop_ambig_selection)
 
 ##plot
@@ -218,6 +228,7 @@ p_exp1_sampling_test <- ggplot(filter(subj_selection,experiment_name=="Experimen
 ##combine into grid with sampling preference plot
 plot_grid(p_exp1_sampling,p_exp1_sampling_test,labels=c("A","B"),label_size=24,align="h")
 ggsave("../figures/exp1_sampling_test.pdf",width=11, height=6.95,dpi=600)
+ggsave("../figures/exp1_sampling_test.png",width=11, height=6.95,dpi=600)
 #ggsave("../figures/exp1_sampling_test.tiff",width=11, height=6.95)
 
 #### Experiment 2 - Sampling ####
@@ -260,6 +271,7 @@ ggplot(filter(subj_selection,experiment_name=="Experiment 2"),aes(x=num_ambig_se
 
 #save plot
 ggsave("../figures/exp2_sampling.pdf",width=9,height=6,dpi=600)
+ggsave("../figures/exp2_sampling.png",width=9,height=6,dpi=600)
 #ggsave("../figures/exp2_sampling.tiff",width=9,height=6)
 
 #relationship with age
@@ -288,6 +300,7 @@ ggplot(pX,aes(Age,isAmbiguous))+
 
 #save plot
 ggsave("../figures/exp2_sampling_age.pdf",width=9,height=6,dpi=600)
+ggsave("../figures/exp2_sampling_age.png",width=9,height=6,dpi=600)
 #ggsave("../figures/exp2_sampling_age.tiff",width=9,height=6)
 
 #### Experiment 2 - Test ####
@@ -306,9 +319,6 @@ subj_summary_test_2 <-  subj_test %>%
   )
 subj_summary_test_2
 
-##overall performance
-t.test(filter(subj_test,experiment_name=="Experiment 2")$accuracy,mu=1/6)
-
 #by item type
 subj_summary_item_2 <- summarySEwithin(
   filter(
@@ -324,9 +334,14 @@ subj_summary_item_2 <- summarySEwithin(
   )
 subj_summary_item_2
 
+## testing overall accuracy against chance
+d$offset.17 <- 1/6
+m <- glmer(isRight~offset(logit(offset.17))+(1|subject)+(1|targetImage),data=filter(d,experiment_name=="Experiment 2"&trialType=="test"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+summary(m)
+
 ## accuracy by item type
 ##logistic mixed=effects model
-m <- glmer(isRight~targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=subset(d,trialType=="test"&experiment_name=="Experiment 2"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+m <- glmer(isRight~offset(logit(offset.17))+targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=subset(d,trialType=="test"&experiment_name=="Experiment 2"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
 summary(m)
 confint(m, method="Wald")
 
@@ -351,6 +366,7 @@ ggplot(subj_summary_item_2,aes(x=targetIsAmbiguousYN,y=accuracy,color=targetIsAm
   theme_classic(base_size=16)+
   theme(legend.position="none", axis.text.x=element_text(size=15))
 ggsave("../figures/exp2_test_item.pdf",width=9,height=6,dpi=600)
+ggsave("../figures/exp2_test_item.png",width=9,height=6,dpi=600)
 #ggsave("../figures/exp2_test_item.tiff",width=9,height=6)
 
 ## Tendency to select ambiguous items at test
@@ -400,6 +416,7 @@ ggplot(subj_summary_choiceType_2,aes(x=targetIsAmbiguousYN,y=ambiguous_choice,co
   theme_classic(base_size=16)+
   theme(legend.position="none", axis.text.x=element_text(size=15))
 ggsave("../figures/exp2_test_choiceType.pdf",width=9,height=6,dpi=600)
+ggsave("../figures/exp2_test_choiceType.png",width=9,height=6,dpi=600)
 #ggsave("../figures/exp2_test_choiceType.tiff",width=9,height=6)
 
 
@@ -468,6 +485,7 @@ ggplot(subj_summary_item_choice_2,aes(x=targetIsAmbiguousYN,y=accuracy,color=tar
   theme(legend.position="none", axis.text.x=element_text(size=15))+
   facet_wrap(~chosen_factor)
 ggsave("../figures/exp2_test_item_sampled.pdf",width=9,height=6,dpi=600)
+ggsave("../figures/exp2_test_item_sampled.png",width=9,height=6,dpi=600)
 #ggsave("../figures/exp2_test_item_sampled.tiff",width=9,height=6)
 
 ## logistic mixed-effects model
@@ -477,6 +495,25 @@ d$chosenC <- ifelse(!is.na(d$chosen)&d$chosen==0,-0.5,
 m <- glmer(isRight~targetIsAmbiguousC*chosenC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=subset(d,trialType=="test"&experiment_name=="Experiment 2"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
 summary(m)
 confint(m, method="Wald")
+
+## preference for sampling ambiguous items and test performance
+cor.test(subset(subj_selection,ambiguity_condition=="ambiguous"&experiment_name=="Experiment 2")$accuracy,subset(subj_selection,ambiguity_condition=="ambiguous"&experiment_name=="Experiment 2")$prop_ambig_selection)
+##plot
+p_exp2_sampling_test <- ggplot(filter(subj_selection,experiment_name=="Experiment 2"),aes(prop_ambig_selection,accuracy, color=ambiguity_condition))+
+  geom_violin(aes(group=prop_ambig_selection),draw_quantiles=c(0.5))+
+  geom_dotplot(aes(group=prop_ambig_selection,fill=ambiguity_condition),alpha=0.6,binaxis="y",stackdir="center",dotsize=0.8)+
+  scale_color_manual(limits=c("ambiguous"),
+                     values=c("#E41A1C"))+
+  geom_smooth(method="lm",color="black",fill="#4B0082",alpha=0.3)+
+  theme_classic()+
+  scale_x_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1))+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1),limits=c(0,1.08))+
+  theme_classic(base_size=24)+
+  ylab("Test Accuracy")+
+  theme(legend.position="none")+
+  xlab("Probability of \nAmbiguous Selection")
+ggsave("../figures/exp2_test_sampling_preference.pdf",width=9,height=6,dpi=600)
+ggsave("../figures/exp2_test_sampling_preference.png",width=9,height=6,dpi=600)
 
 #### Experiment 3 - Sampling ####
 
@@ -503,6 +540,7 @@ p1 <- ggplot(filter(subj_selection,experiment_name=="Experiment 3"),aes(x=num_am
   scale_x_continuous(breaks=c(0,1,2))+
   scale_y_continuous(breaks=c(0,5,10,15,20,25,30))
 ggsave("../figures/exp3_sampling.pdf",width=7,height=6,dpi=600)
+ggsave("../figures/exp3_sampling.png",width=7,height=6,dpi=600)
 #ggsave("../figures/exp3_sampling.tiff",width=7,height=6)
 
 ## Relationship to age
@@ -527,10 +565,12 @@ p2 <- ggplot(pX,aes(Age,isAmbiguous))+
   theme(axis.title = element_text(size=20),
         axis.text  = element_text(size=16))
 ggsave("../figures/exp3_sampling_age.pdf",width=9, height=6,dpi=600)
+ggsave("../figures/exp3_sampling_age.png",width=9, height=6,dpi=600)
 #ggsave("../figures/exp3_sampling_age.tiff",width=9, height=6)
 
 plot_grid(p1,p2,labels=c("A","B"),label_size=24,align="h")
 ggsave("../figures/exp3_sampling_age_hist.pdf",width=11, height=6.95,dpi=600)
+ggsave("../figures/exp3_sampling_age_hist.png",width=11, height=6.95,dpi=600)
 #ggsave("../figures/exp3_sampling_age_hist.tiff",width=11, height=6.95)
 
 ####Experiment 3 - Test####
@@ -583,6 +623,7 @@ ggplot(subj_summary_item_3,aes(x=targetIsAmbiguousYN,y=accuracy,color=targetIsAm
   theme_classic(base_size=16)+
   theme(legend.position="none", axis.text.x=element_text(size=15))
 ggsave("../figures/exp3_test_item.pdf",width=9,height=6,dpi=600)
+ggsave("../figures/exp3_test_item.png",width=9,height=6,dpi=600)
 #ggsave("../figures/exp3_test_item.tiff",width=9,height=6)
 
 ##logistic mixed-effects model
@@ -590,7 +631,6 @@ d$offset.25 <- 1/4
 #overall
 m <- glmer(isRight~offset(logit(offset.25))+(1|subject)+(1|targetImage),data=filter(d,experiment_name=="Experiment 3"&trialType=="test"),family=binomial)
 summary(m)
-confint(m,method="Wald")
 
 #by item type
 m <- glmer(isRight~offset(logit(offset.25))+targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=filter(d,experiment_name=="Experiment 3"&trialType=="test"),family=binomial)
@@ -662,11 +702,32 @@ ggplot(subj_summary_item_choice_3,aes(x=targetIsAmbiguousYN,y=accuracy,color=tar
   theme(legend.position="none", axis.text.x=element_text(size=15))+
   facet_wrap(~chosen_factor)
 ggsave("../figures/exp3_test_item_sampled.pdf",width=9,height=6,dpi=600)
+ggsave("../figures/exp3_test_item_sampled.png",width=9,height=6,dpi=600)
 #ggsave("../figures/exp3_test_item_sampled.tiff",width=9,height=6)
 
 m <- glmer(isRight~targetIsAmbiguousC*chosenC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=subset(d,trialType=="test"&experiment_name=="Experiment 3"),family=binomial,glmerControl(optimizer="bobyqa"))
 summary(m)
 confint(m, method="Wald")
+
+##relationship between sampling preference for ambiguous items and test accuracy
+cor.test(subset(subj_selection,ambiguity_condition=="ambiguous_me"&experiment_name=="Experiment 3")$accuracy,subset(subj_selection,ambiguity_condition=="ambiguous_me"&experiment_name=="Experiment 3")$prop_ambig_selection)
+
+##plot
+p_exp3_sampling_test <- ggplot(filter(subj_selection,experiment_name=="Experiment 3"),aes(prop_ambig_selection,accuracy, color=ambiguity_condition))+
+  geom_violin(aes(group=prop_ambig_selection),draw_quantiles=c(0.5))+
+  geom_dotplot(aes(group=prop_ambig_selection,fill=ambiguity_condition),alpha=0.6,binaxis="y",stackdir="center",dotsize=0.8)+
+  scale_color_manual(limits=c("ambiguous_me"),
+                     values=c("#E41A1C"))+
+  geom_smooth(method="lm",color="black",fill="#4B0082",alpha=0.3)+
+  theme_classic()+
+  scale_x_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1))+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1),limits=c(0,1.08))+
+  theme_classic(base_size=24)+
+  ylab("Test Accuracy")+
+  theme(legend.position="none")+
+  xlab("Probability of \nAmbiguous Selection")
+ggsave("../figures/exp3_test_sampling_preference.pdf",width=9,height=6,dpi=600)
+ggsave("../figures/exp3_test_sampling_preference.png",width=9,height=6,dpi=600)
 
 #### Experiment S1 - Sampling ####
 
@@ -742,6 +803,7 @@ p_expS1_sampling <- ggplot(model_pred,aes(x=ambiguity_condition,y=prop_ambiguous
   theme(legend.position="none")+
   scale_x_discrete(name="Condition")
 ggsave("../figures/expS1_sampling.pdf",width=11, height=6.95,dpi=600)
+ggsave("../figures/expS1_sampling.png",width=11, height=6.95,dpi=600)
 #ggsave("../figures/expS1_sampling.tiff",width=11, height=6.95)
 
 #### Experiment S1 - Test ####
@@ -850,6 +912,7 @@ p_expS1_partialtest <- ggplot(filter(subj_summary_test_item_s1, ambiguity_condit
   facet_wrap(~testHalf_name)
 plot_grid(p_expS1_fulltest,p_expS1_partialtest, labels=c("A","B"),rel_widths=c(1,1),label_size=24,nrow=1)
 ggsave("../figures/expS1_adults_test.pdf",width=13, height=8.21,dpi=600)
+ggsave("../figures/expS1_adults_test.png",width=13, height=8.21,dpi=600)
 #ggsave("../figures/expS1_adults_test.tiff",width=13, height=8.21)
 
 #correlations Experiment S1: proportion ambiguous items selected and test accuracy
@@ -901,6 +964,7 @@ pS1_partialsampling_test <- ggplot(filter(subj_test_half,ambiguity_condition=="p
   facet_wrap(~testHalf_name)
 plot_grid(pS1_fullsampling_test,pS1_partialsampling_test, labels=c("A","B"),rel_widths=c(1,1),label_size=24,nrow=1)
 ggsave("../figures/expS1_sampling_test.pdf",width=11, height=6.95,dpi=600)
+ggsave("../figures/expS1_sampling_test.png",width=11, height=6.95,dpi=600)
 #ggsave("../figures/expS1_sampling_test.tiff",width=11, height=6.95)
 
 #increase in accuracy block 1 to 2

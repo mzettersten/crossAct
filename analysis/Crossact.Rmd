@@ -11,7 +11,7 @@ output:
 ```{r setup, include=FALSE}
 library(here)
 #set data path
-data_path <- here("data","Crossact_data.csv")
+data_path <- here::here("data","Crossact_data.csv")
 source('summarizeData.R') #helper functions, from R cookbook (http://www.cookbook-r.com/Graphs/Plotting_means_and_error_bars_(ggplot2)/)
 library(tidyverse) #version 1.2.1
 library(cowplot) #version 1.0.0
@@ -28,6 +28,8 @@ library(DT) #version 0.8
 Analysis walkthrough for the paper "Sampling to learn words: 
 Adults and children sample words that reduce referential ambiguity
 " (Author names removed, 2019).
+
+For more background information and the underlying data, visit the OSF repository for this report: [OSF site](https://osf.io/udmvh/?view_only=b9b8a986fd3a4235a073ec35d70a2266)
 
 See crossact_codebook for information about individual columns.
 
@@ -116,7 +118,7 @@ d %>%
 
 ### Experiment 3 {.tabset}
 
-Note that we currently missing some demographic information (ethnicity & language) for 6 of the 56 participants, due to experimenter error.
+Note that we are currently missing some demographic information (ethnicity & language) for 6 of the 56 participants, due to experimenter error.
 
 #### Gender, Age, Native Language
 
@@ -349,13 +351,22 @@ kable(subj_summary_test_item_1)
 
 #### Logistic mixed-effects model
 
+##### Overall Test Accuracy
+
+```{r, warning=F, message=F}
+## testing overall accuracy against chance
+d$offset.125 <- 1/8
+m <- glmer(isRight~offset(logit(offset.125))+(1|subject)+(1|targetImage),data=filter(d,experiment_name=="Experiment 1"&trialType=="test"),family=binomial,glmerControl(optimizer="bobyqa"))
+summary(m)
+```
+
 ##### Testing Difference between Items
 
 ```{r, warning=F, message=F}
 ## testing difference between items
 d$targetIsAmbiguousC <- ifelse(!is.na(d$targetIsAmbiguous) & d$targetIsAmbiguous==1,0.5,
                                         ifelse(!is.na(d$targetIsAmbiguous) & d$targetIsAmbiguous==0,-0.5,NA))
-m <- glmer(isRight~targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=filter(d,(experiment_name=="Experiment 1")&trialType=="test"),family=binomial,glmerControl(optimizer="bobyqa"))
+m <- glmer(isRight~offset(logit(offset.125))+targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=filter(d,(experiment_name=="Experiment 1")&trialType=="test"),family=binomial,glmerControl(optimizer="bobyqa"))
 summary(m)
 confint(m, method="Wald")[5:6,]
 ```
@@ -535,9 +546,6 @@ subj_summary_test_2 <-  subj_test %>%
   ) %>%
   select(-ci)
 kable(subj_summary_test_2)
-
-##overall performance
-t.test(filter(subj_test,experiment_name=="Experiment 2")$accuracy,mu=1/6)
 ```
 
 ##### Test Accuracy Split by Item
@@ -550,12 +558,21 @@ subj_summary_item_2 %>%
 
 #### Logistic Mixed-Effects Model
 
+##### Overall Test Accuracy
+
+```{r, warning=F,message=F}
+## testing overall accuracy against chance
+d$offset.17 <- 1/6
+m <- glmer(isRight~offset(logit(offset.17))+(1|subject)+(1|targetImage),data=filter(d,experiment_name=="Experiment 2"&trialType=="test"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+summary(m)
+```
+
 ##### Test Accuracy by Item Type
 
 ```{r, warning=F,message=F}
 ## accuracy by item type
 ##logistic mixed=effects model
-m <- glmer(isRight~targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=subset(d,trialType=="test"&experiment_name=="Experiment 2"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+m <- glmer(isRight~offset(logit(offset.17))+targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=subset(d,trialType=="test"&experiment_name=="Experiment 2"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
 summary(m)
 confint(m, method="Wald")[5:6,]
 ```
@@ -698,6 +715,26 @@ summary(m)
 confint(m, method="Wald")[5:8,]
 ```
 
+##### Correlation between overall sampling preference and test accuracy
+
+```{r, warning=F, message=F}
+## preference for sampling ambiguous items and test performance
+cor.test(subset(subj_selection,ambiguity_condition=="ambiguous"&experiment_name=="Experiment 2")$accuracy,subset(subj_selection,ambiguity_condition=="ambiguous"&experiment_name=="Experiment 2")$prop_ambig_selection)
+##plot
+ggplot(filter(subj_selection,experiment_name=="Experiment 2"),aes(prop_ambig_selection,accuracy, color=ambiguity_condition))+
+  geom_violin(aes(group=prop_ambig_selection),draw_quantiles=c(0.5))+
+  geom_dotplot(aes(group=prop_ambig_selection,fill=ambiguity_condition),alpha=0.6,binaxis="y",stackdir="center",dotsize=0.8)+
+  scale_color_manual(limits=c("ambiguous"),
+                     values=c("#E41A1C"))+
+  geom_smooth(method="lm",color="black",fill="#4B0082",alpha=0.3)+
+  theme_classic()+
+  scale_x_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1))+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1),limits=c(0,1.08))+
+  theme_classic(base_size=24)+
+  ylab("Test Accuracy")+
+  theme(legend.position="none")+
+  xlab("Probability of \nAmbiguous Selection")
+```
 
 ## Experiment 3
 
@@ -837,7 +874,7 @@ subj_summary_item_3 %>%
 
 #### Logistic Mixed-Effects Model
 
-#####  Overall Test Accuracy
+##### Overall Test Accuracy
 
 ```{r, warning=F,message=F}
 ##logistic mixed-effects model
@@ -845,9 +882,7 @@ d$offset.25 <- 1/4
 #overall
 m <- glmer(isRight~offset(logit(offset.25))+(1|subject)+(1|targetImage),data=filter(d,experiment_name=="Experiment 3"&trialType=="test"),family=binomial)
 summary(m)
-confint(m,method="Wald")[3,]
 ```
-
 
 ##### Test Accuracy by Item Type
 
@@ -941,6 +976,29 @@ m <- glmer(isRight~targetIsAmbiguousC*chosenC+(1+targetIsAmbiguousC|subject)+(1|
 summary(m)
 confint(m, method="Wald")[5:8,]
 ```
+
+##### Correlation between overall sampling preference and test accuracy
+
+```{r, warning=F, message=F}
+##relationship between sampling preference for ambiguous items and test accuracy
+cor.test(subset(subj_selection,ambiguity_condition=="ambiguous_me"&experiment_name=="Experiment 3")$accuracy,subset(subj_selection,ambiguity_condition=="ambiguous_me"&experiment_name=="Experiment 3")$prop_ambig_selection)
+
+##plot
+ggplot(filter(subj_selection,experiment_name=="Experiment 3"),aes(prop_ambig_selection,accuracy, color=ambiguity_condition))+
+  geom_violin(aes(group=prop_ambig_selection),draw_quantiles=c(0.5))+
+  geom_dotplot(aes(group=prop_ambig_selection,fill=ambiguity_condition),alpha=0.6,binaxis="y",stackdir="center",dotsize=0.8)+
+  scale_color_manual(limits=c("ambiguous_me"),
+                     values=c("#E41A1C"))+
+  geom_smooth(method="lm",color="black",fill="#4B0082",alpha=0.3)+
+  theme_classic()+
+  scale_x_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1))+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1),limits=c(0,1.08))+
+  theme_classic(base_size=24)+
+  ylab("Test Accuracy")+
+  theme(legend.position="none")+
+  xlab("Probability of \nAmbiguous Selection")
+```
+
 
 ## Experiment S1
 
