@@ -6,7 +6,7 @@ Adults and children sample words that reduce referential ambiguity" (Zettersten 
 
 How do learners gather new information during word learning? One possibility is that learners selectively sample items that help them reduce uncertainty about new word meanings. In a series of cross-situational word learning tasks with adults and children, we manipulated the referential ambiguity of label-object pairs experienced during training and subsequently investigated which words participants chose to sample additional information about. In our first experiment, adult learners chose to receive additional training on object-label associations that reduce referential ambiguity during cross-situational word learning. This ambiguity-reduction strategy was related to improved test performance. In two subsequent experiments, we found that, at least in some contexts, children (3-8 years of age) show a similar preference to seek information about words experienced in ambiguous word learning situations. In Experiment 2, children did not preferentially select object-label associations that remained ambiguous during cross-situational word learning. However, in a third experiment that increased the relative ambiguity of two sets of novel object-label associations, we found evidence that children preferentially make selections that reduce ambiguity about novel word meanings. These results carry implications for understanding how children actively contribute to their own language development by seeking information that supports learning.
 
-## Link to OSF project (not yet public for reviewing purposes):
+## Link to OSF project:
 
 https://osf.io/udmvh/
 
@@ -53,7 +53,7 @@ The experiment scripts folder contains the scripts for the html/ javascript-base
 
 ## Questions
 
-Feel free to contact me at **zettersten@wisc.edu** if you have any comments or questions about the data or the analyses.
+Feel free to contact me at **martincz@princeton.edu** if you have any comments or questions about the data or the analyses.
 
 
 
