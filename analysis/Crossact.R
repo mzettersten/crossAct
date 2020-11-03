@@ -169,7 +169,7 @@ summary(m)
 ## testing difference between items
 d$targetIsAmbiguousC <- ifelse(!is.na(d$targetIsAmbiguous) & d$targetIsAmbiguous==1,0.5,
                                         ifelse(!is.na(d$targetIsAmbiguous) & d$targetIsAmbiguous==0,-0.5,NA))
-m <- glmer(isRight~offset(logit(offset.125))+targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=filter(d,(experiment_name=="Experiment 1")&trialType=="test"),family=binomial,glmerControl(optimizer="bobyqa"))
+m <- glmer(isRight~1+targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=filter(d,(experiment_name=="Experiment 1")&trialType=="test"),family=binomial,glmerControl(optimizer="bobyqa"))
 summary(m)
 confint(m, method="Wald")
 
@@ -341,7 +341,7 @@ summary(m)
 
 ## accuracy by item type
 ##logistic mixed=effects model
-m <- glmer(isRight~offset(logit(offset.17))+targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=subset(d,trialType=="test"&experiment_name=="Experiment 2"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+m <- glmer(isRight~1+targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=subset(d,trialType=="test"&experiment_name=="Experiment 2"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
 summary(m)
 confint(m, method="Wald")
 
@@ -633,7 +633,7 @@ m <- glmer(isRight~offset(logit(offset.25))+(1|subject)+(1|targetImage),data=fil
 summary(m)
 
 #by item type
-m <- glmer(isRight~offset(logit(offset.25))+targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=filter(d,experiment_name=="Experiment 3"&trialType=="test"),family=binomial)
+m <- glmer(isRight~1+targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=filter(d,experiment_name=="Experiment 3"&trialType=="test"),family=binomial)
 summary(m)
 confint(m,method="Wald")
 
