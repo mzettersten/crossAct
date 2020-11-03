@@ -1,7 +1,7 @@
 #load packages
 library(here)
 #set data path #version 0.1
-data_path <- here("data","Crossact_data.csv")
+data_path <- here::here("data","Crossact_data.csv")
 source('summarizeData.R') #helper functions, from R cookbook (http://www.cookbook-r.com/Graphs/Plotting_means_and_error_bars_(ggplot2)/)
 library(tidyverse) #version 1.2.1
 library(cowplot) #version 1.0.0
@@ -161,10 +161,15 @@ subj_summary_test_item_1 <-  summarySEwithin(
   select(-accuracy_norm,-sd,-se,-ci)
 subj_summary_test_item_1
 
+## testing overall accuracy against chance
+d$offset.125 <- 1/8
+m <- glmer(isRight~offset(logit(offset.125))+(1|subject)+(1|targetImage),data=filter(d,experiment_name=="Experiment 1"&trialType=="test"),family=binomial,glmerControl(optimizer="bobyqa"))
+summary(m)
+
 ## testing difference between items
 d$targetIsAmbiguousC <- ifelse(!is.na(d$targetIsAmbiguous) & d$targetIsAmbiguous==1,0.5,
                                         ifelse(!is.na(d$targetIsAmbiguous) & d$targetIsAmbiguous==0,-0.5,NA))
-m <- glmer(isRight~targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=filter(d,(experiment_name=="Experiment 1")&trialType=="test"),family=binomial,glmerControl(optimizer="bobyqa"))
+m <- glmer(isRight~offset(logit(offset.125))+targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=filter(d,(experiment_name=="Experiment 1")&trialType=="test"),family=binomial,glmerControl(optimizer="bobyqa"))
 summary(m)
 confint(m, method="Wald")
 
@@ -314,9 +319,6 @@ subj_summary_test_2 <-  subj_test %>%
   )
 subj_summary_test_2
 
-##overall performance
-t.test(filter(subj_test,experiment_name=="Experiment 2")$accuracy,mu=1/6)
-
 #by item type
 subj_summary_item_2 <- summarySEwithin(
   filter(
@@ -332,9 +334,14 @@ subj_summary_item_2 <- summarySEwithin(
   )
 subj_summary_item_2
 
+## testing overall accuracy against chance
+d$offset.17 <- 1/6
+m <- glmer(isRight~offset(logit(offset.17))+(1|subject)+(1|targetImage),data=filter(d,experiment_name=="Experiment 2"&trialType=="test"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+summary(m)
+
 ## accuracy by item type
 ##logistic mixed=effects model
-m <- glmer(isRight~targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=subset(d,trialType=="test"&experiment_name=="Experiment 2"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
+m <- glmer(isRight~offset(logit(offset.17))+targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=subset(d,trialType=="test"&experiment_name=="Experiment 2"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
 summary(m)
 confint(m, method="Wald")
 
@@ -624,7 +631,6 @@ d$offset.25 <- 1/4
 #overall
 m <- glmer(isRight~offset(logit(offset.25))+(1|subject)+(1|targetImage),data=filter(d,experiment_name=="Experiment 3"&trialType=="test"),family=binomial)
 summary(m)
-confint(m,method="Wald")
 
 #by item type
 m <- glmer(isRight~offset(logit(offset.25))+targetIsAmbiguousC+(1+targetIsAmbiguousC|subject)+(1|targetImage),data=filter(d,experiment_name=="Experiment 3"&trialType=="test"),family=binomial)
