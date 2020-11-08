@@ -758,6 +758,23 @@ ggplot(filter(subj_selection,experiment_name=="Experiment 3"),aes(x=num_ambig_se
   scale_y_continuous(breaks=c(0,5,10,15,20,25,30))
 ```
 
+#### Descriptives
+```{r, warning=F,message=F}
+#descriptives
+subj_summary_3 <-  subj_selection %>%
+  filter(experiment_name=="Experiment 3") %>%
+  group_by(ambiguity_condition) %>%
+  summarize(
+    N=n(),
+    prop_ambiguous=mean(prop_ambig_selection),
+    ci_ambiguous=qt(0.975, N-1)*sd(prop_ambig_selection,na.rm=T)/sqrt(N),
+    prop_ambiguous_lower_ci=prop_ambiguous-ci_ambiguous,
+    prop_ambiguous_upper_ci=prop_ambiguous+ci_ambiguous,
+  ) %>%
+  select(-ci_ambiguous)
+kable(subj_summary_3)
+```
+
 #### Logistic mixed-effects model
 
 ```{r, warning=F, message=F}

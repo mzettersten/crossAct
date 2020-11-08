@@ -517,6 +517,19 @@ ggsave("../figures/exp2_test_sampling_preference.png",width=9,height=6,dpi=600)
 
 #### Experiment 3 - Sampling ####
 
+#descriptives
+subj_summary_3 <-  subj_selection %>%
+  filter(experiment_name=="Experiment 3") %>%
+  group_by(ambiguity_condition) %>%
+  summarize(
+    N=n(),
+    prop_ambiguous=mean(prop_ambig_selection),
+    ci_ambiguous=qt(0.975, N-1)*sd(prop_ambig_selection,na.rm=T)/sqrt(N),
+    prop_ambiguous_lower_ci=prop_ambiguous-ci_ambiguous,
+    prop_ambiguous_upper_ci=prop_ambiguous+ci_ambiguous,
+  )
+subj_summary_3
+
 ##logistic mixed-effects model
 m=glmer(isAmbiguous ~ 1+(1|subject)+(1|choiceImage),data=subset(d,experiment_name=="Experiment 3"&trialType=="selection"),family=binomial,glmerControl(optimizer="bobyqa",check.conv.singular="ignore"))
 summary(m)
