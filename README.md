@@ -1,6 +1,7 @@
 # crossAct
-Data and analysis scripts for a study of active learning in a cross-situational word learning task: "Sampling to learn words: 
-Adults and children sample words that reduce referential ambiguity" (Zettersten &amp; Saffran)
+Data and analysis scripts for:
+
+Zettersten, M., & Saffran, J. (accepted). Sampling to learn words: Adults and children sample words that reduce referential ambiguity. Developmental Science.
 
 ## Abstract
 
