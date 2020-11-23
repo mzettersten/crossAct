@@ -1,7 +1,7 @@
 # crossAct
 Data and analysis scripts for:
 
-Zettersten, M., & Saffran, J. (accepted). Sampling to learn words: Adults and children sample words that reduce referential ambiguity. Developmental Science.
+Zettersten, M., & Saffran, J. (in press). Sampling to learn words: Adults and children sample words that reduce referential ambiguity. Developmental Science.  https://doi.org/10.1111/desc.13064
 
 ## Abstract
 
